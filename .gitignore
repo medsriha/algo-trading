@@ -8,3 +8,5 @@ venv/
 *.pyz
 *.pywz
 *.pyzw
+*.txt
+.DS_Store
