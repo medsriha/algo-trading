@@ -6,6 +6,14 @@ import dotenv
 import datetime
 import pandas as pd
 from typing import Optional, Union, List
+import logging
+
+logger = logging.getLogger(__name__)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 class StockDataFetcher:
     """A class to fetch historical stock data from Alpaca API."""
@@ -50,9 +58,12 @@ class StockDataFetcher:
             
         # Set default dates if not provided (Year to Date)
         if not start_date:
-            start_date = datetime.datetime(datetime.datetime.now().year, 1, 1).strftime('%Y-%m-%d')
+            start_date = (datetime.datetime.now() - datetime.timedelta(days=365)).strftime('%Y-%m-%d')
+            
         if not end_date:
             end_date = datetime.datetime.now().strftime('%Y-%m-%d')
+
+        logger.info(f"Fetching data for {symbols} from {start_date} to {end_date}")
             
         # Map timeframe string to TimeFrame enum
         timeframe_map = {
@@ -68,7 +79,8 @@ class StockDataFetcher:
                 symbol_or_symbols=symbols,
                 timeframe=timeframe_map[timeframe],
                 start=start_date,
-                end=end_date
+                end=end_date,
+                adjustment="all"
             )
             
             bars = self.client.get_stock_bars(params)
