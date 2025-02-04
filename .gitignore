@@ -9,4 +9,6 @@ venv/
 *.pywz
 *.pyzw
 *.txt
+*.csv
+*.png
 .DS_Store
