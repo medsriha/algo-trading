@@ -129,60 +129,63 @@ class SMACrossoverAnalyzer:
             self.df["close"].rolling(window=self.config.upper_sma).mean()
         )
         self.df["SMA_lower_below_upper"] = self.df["SMA_lower"] < self.df["SMA_upper"]
-        
 
-    def _calculate_price_trends(self, initial_window: int = 5, lookback_period: int = 20) -> None:
+    def _calculate_price_trends(
+        self, initial_window: int = 5, lookback_period: int = 20, trend_threshold: float = 0.001
+    ) -> None:
         """Calculate the trend direction for price movement with dynamic window size based on historical data.
-        
+
         For each point, calculates the window size based on the average length of upward trends
         in the previous lookback_period days.
-        
+
         Args:
             initial_window: Initial number of periods to use for trend calculation (default: 5)
             lookback_period: Number of previous days to analyze for trend lengths (default: 20)
         """
-        logger.info(f"[crossover][{self.ticker}] Calculating price trends with dynamic windows")
-        
-        trend_threshold = 0.001  # Adjust this value to change sensitivity
-        
+        logger.info(
+            f"[crossover][{self.ticker}] Calculating price trends with dynamic windows"
+        )
+
         # Initialize columns
         self.df["price_trend"] = 0.0
         self.df["price_trend_direction"] = 0
         self.df["window_size"] = initial_window
         self.df["upward_trend_days"] = 0  # New column for consecutive upward days
-        
+
         # First pass with initial window to get basic trend direction
         initial_trends = (
-            self.df["close"].rolling(window=initial_window)
+            self.df["close"]
+            .rolling(window=initial_window)
             .apply(lambda x: np.polyfit(range(len(x)), x, 1)[0])
             .fillna(0)
         )
-        
+
         initial_directions = np.where(
-            initial_trends > trend_threshold, 1,
-            np.where(initial_trends < -trend_threshold, -1, 0)
+            initial_trends > trend_threshold,
+            1,
+            np.where(initial_trends < -trend_threshold, -1, 0),
         )
-        
+
         # For each point, calculate the dynamic window based on historical data
         for i in range(lookback_period, self.df.shape[0]):
             # Get historical slice
-            historical_slice = initial_directions[max(0, i-lookback_period):i]
-            
+            historical_slice = initial_directions[max(0, i - lookback_period) : i]
+
             # Calculate lengths of upward trends in historical data
             trend_lengths = []
             current_length = 0
-            
+
             for direction in historical_slice:
                 if direction == 1:  # Upward trend
                     current_length += 1
                 elif current_length > 0:  # End of upward trend
                     trend_lengths.append(current_length)
                     current_length = 0
-            
+
             # Add the last trend length if we ended in an upward trend
             if current_length > 0:
                 trend_lengths.append(current_length)
-            
+
             # Calculate dynamic window size based on average upward trend length
             if trend_lengths:
                 dynamic_window = int(np.mean(trend_lengths))
@@ -190,67 +193,80 @@ class SMACrossoverAnalyzer:
                 dynamic_window = max(initial_window, min(dynamic_window, 20))
             else:
                 dynamic_window = initial_window
-            
+
             # Store the window size
             self.df.loc[i, "window_size"] = dynamic_window
-            
+
             # Calculate trend using the dynamic window
             if i >= dynamic_window:
                 try:
-                    window_data = self.df["close"].iloc[i-dynamic_window+1:i+1].values
+                    window_data = (
+                        self.df["close"].iloc[i - dynamic_window + 1 : i + 1].values
+                    )
                     x = np.arange(len(window_data), dtype=float)
-                    
+
                     # Check if we have enough unique values
                     if len(np.unique(window_data)) > 1:
                         # Normalize x and y to prevent SVD convergence issues
                         x = (x - x.mean()) / x.std()
                         y = (window_data - window_data.mean()) / window_data.std()
-                        
+
                         slope = np.polyfit(x, y, 1)[0]
                         self.df.loc[i, "price_trend"] = slope
                         trend_direction = (
-                            1 if slope > trend_threshold else 
-                            -1 if slope < -trend_threshold else 0
+                            1
+                            if slope > trend_threshold
+                            else -1 if slope < -trend_threshold else 0
                         )
                         self.df.loc[i, "price_trend_direction"] = trend_direction
-                        
+
                         # Update consecutive upward trend days
                         if trend_direction == 1:  # Upward trend
                             if i > 0:
-                                self.df.loc[i, "upward_trend_days"] = self.df.loc[i-1, "upward_trend_days"] + 1
+                                self.df.loc[i, "upward_trend_days"] = (
+                                    self.df.loc[i - 1, "upward_trend_days"] + 1
+                                )
                             else:
                                 self.df.loc[i, "upward_trend_days"] = 1
                         else:  # Not an upward trend
                             self.df.loc[i, "upward_trend_days"] = 0
-                            
+
                     else:
                         # If all values are the same, trend is flat
                         self.df.loc[i, "price_trend"] = 0
                         self.df.loc[i, "price_trend_direction"] = 0
                         self.df.loc[i, "upward_trend_days"] = 0
-                        
+
                 except (np.linalg.LinAlgError, ValueError) as e:
                     # If there's an error, use the previous value
                     if i > 0:
-                        self.df.loc[i, "price_trend"] = self.df.loc[i-1, "price_trend"]
-                        self.df.loc[i, "price_trend_direction"] = self.df.loc[i-1, "price_trend_direction"]
-                        self.df.loc[i, "upward_trend_days"] = 0  # Reset upward trend days on error
+                        self.df.loc[i, "price_trend"] = self.df.loc[
+                            i - 1, "price_trend"
+                        ]
+                        self.df.loc[i, "price_trend_direction"] = self.df.loc[
+                            i - 1, "price_trend_direction"
+                        ]
+                        self.df.loc[i, "upward_trend_days"] = (
+                            0  # Reset upward trend days on error
+                        )
                     else:
                         self.df.loc[i, "price_trend"] = 0
                         self.df.loc[i, "price_trend_direction"] = 0
                         self.df.loc[i, "upward_trend_days"] = 0
-        
+
         # Fill initial values
         self.df.loc[:lookback_period, "window_size"] = initial_window
-        self.df.loc[:lookback_period, "upward_trend_days"] = 0  # Initialize early values
-        
+        self.df.loc[:lookback_period, "upward_trend_days"] = (
+            0  # Initialize early values
+        )
+
         # Log statistics about window sizes and upward trends
         avg_window = self.df["window_size"].mean()
         min_window = self.df["window_size"].min()
         max_window = self.df["window_size"].max()
         max_upward_days = self.df["upward_trend_days"].max()
         avg_upward_days = self.df["upward_trend_days"].mean()
-        
+
         logger.info(
             f"[crossover][{self.ticker}] Window size statistics - "
             f"Average: {avg_window:.1f}, Min: {min_window}, Max: {max_window}"
@@ -288,9 +304,15 @@ class SMACrossoverAnalyzer:
             avg_upward_days = self.df.iloc[i]["window_size"]
             trend_direction = self.df.iloc[i]["price_trend_direction"]
             # Start pattern only when previous day have SMA_lower below upper
-            # and it's been trending upward for N days as long as the number of days trending 
+            # and it's been trending upward for N days as long as the number of days trending
             # is less than the average of upper trend length from historical data
-            if not in_pattern and prev_sma_condition and upward_trend_days <= avg_upward_days and trend_direction == 1 and upward_trend_days > 1:
+            if (
+                not in_pattern
+                and prev_sma_condition
+                and upward_trend_days <= avg_upward_days
+                and trend_direction == 1
+                and upward_trend_days > 1
+            ):
                 in_pattern = True
                 current_pattern_start = i
                 initial_price = current_price
@@ -624,11 +646,18 @@ class SMACrossoverAnalyzer:
 
         # Set the backend to Agg explicitly
         import matplotlib
+
         matplotlib.use("Agg")
 
         try:
             # Create figure with two subplots
-            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 12), height_ratios=[3, 1], gridspec_kw={'hspace': 0.3})
+            fig, (ax1, ax2) = plt.subplots(
+                2,
+                1,
+                figsize=(15, 12),
+                height_ratios=[3, 1],
+                gridspec_kw={"hspace": 0.3},
+            )
 
             # Upper subplot - Price and SMAs
             ax1.plot(
@@ -643,14 +672,14 @@ class SMACrossoverAnalyzer:
                 self.df["timestamp"],
                 self.df["SMA_lower"],
                 label=f"{self.config.lower_sma} SMA",
-                color='orange',
+                color="orange",
                 linewidth=2,
             )
             ax1.plot(
                 self.df["timestamp"],
                 self.df["SMA_upper"],
                 label=f"{self.config.upper_sma} SMA",
-                color='green',
+                color="green",
                 linewidth=2,
             )
 
@@ -698,7 +727,9 @@ class SMACrossoverAnalyzer:
 
             # Plot ditch patterns
             ditch_groups = sorted(
-                self.df[self.df["pattern_group_ditch"] > 0]["pattern_group_ditch"].unique()
+                self.df[self.df["pattern_group_ditch"] > 0][
+                    "pattern_group_ditch"
+                ].unique()
             )
             for group in ditch_groups:
                 group_data = self.df[self.df["pattern_group_ditch"] == group]
@@ -744,27 +775,27 @@ class SMACrossoverAnalyzer:
             ax1.set_xlabel("Date")
             ax1.set_ylabel("Price")
             ax1.legend(loc="upper left", bbox_to_anchor=(1.05, 1))
-            ax1.tick_params(axis='x', rotation=45)
+            ax1.tick_params(axis="x", rotation=45)
 
             # Lower subplot - Price trend direction
             ax2.plot(
                 self.df["timestamp"],
                 self.df["price_trend_direction"],
                 label="Price Trend",
-                color='purple',
-                linestyle='-',
-                linewidth=2
+                color="purple",
+                linestyle="-",
+                linewidth=2,
             )
 
             # Set y-axis limits and ticks for trend subplot
             ax2.set_ylim([-1.5, 1.5])
             ax2.set_yticks([-1, 0, 1])
-            ax2.set_yticklabels(['Downward', 'Flat', 'Upward'])
+            ax2.set_yticklabels(["Downward", "Flat", "Upward"])
             ax2.set_xlabel("Date")
             ax2.set_ylabel("Price Trend Direction")
             ax2.legend(loc="upper left", bbox_to_anchor=(1.05, 1))
             ax2.grid(True, alpha=0.3)
-            ax2.tick_params(axis='x', rotation=45)
+            ax2.tick_params(axis="x", rotation=45)
 
             # Generate filename with timestamp
             filename = f"{self.ticker}_sma_analysis.png"
@@ -790,7 +821,6 @@ class SMACrossoverAnalyzer:
                 logger.info(f"[crossover][{self.ticker}] Cleaned up output directory")
         except Exception as e:
             logger.error(f"[crossover][{self.ticker}] Error during cleanup: {str(e)}")
-
 
     def calculate_combined_return(self) -> float:
         """Calculate the combined return from both buy and ditch patterns.
@@ -826,12 +856,25 @@ class SMACrossoverAnalyzer:
 
         return combined_return
 
-def process_ticker(ticker: str, min_return: float, min_buy_patterns: int) -> tuple[str, float]:
+
+def process_ticker(
+    ticker: str, min_return: float, min_buy_patterns: int
+) -> tuple[str, float]:
     """Process a single ticker."""
     fetcher = StockDataFetcher()
     df = fetcher.get_stock_data(ticker, timeframe="1D")
 
-    analyzer = SMACrossoverAnalyzer(ticker=ticker, dataframe=df)
+    analyzer = SMACrossoverAnalyzer(
+        ticker=ticker,
+        dataframe=df,
+        config=CrossoverConfig(
+            upper_sma=200,
+            lower_sma=50,
+            stop_loss=0.05,
+            take_profit=0.1,
+            pattern_length=10,
+        ),
+    )
     analyzer.find_crossover_patterns()
 
     if analyzer.total_buy_patterns >= min_buy_patterns:
@@ -860,7 +903,7 @@ def process_tickers(
         dict: Dictionary of tickers and their combined returns that meet the threshold
     """
     results = {}
-    
+
     # Clean the tickers and remove any whitespace/newlines
     clean_tickers = [t.strip() for t in tickers if t.strip()]
 
