@@ -7,10 +7,6 @@ import datetime
 import pandas as pd
 from typing import Optional, Union, List
 import logging
-import yfinance as yf  # We'll use yfinance for shares outstanding data
-import concurrent.futures
-from alpaca.trading.client import TradingClient  # Add this import at the top
-import time
 
 dotenv.load_dotenv()
 
