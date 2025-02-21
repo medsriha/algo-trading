@@ -18,7 +18,7 @@ class DatabaseCrossoversConfig:
             self.columns = {
                 "data_creation_date": {"type": "DATE", "constraints": "NOT NULL"},
                 "timestamp_date_start": {"type": "DATE", "constraints": "NOT NULL"},
-                "timestamp_date_end": {"type": "DATE", "constraints": "NOT NULL"}, 
+                "timestamp_date_end": {"type": "DATE", "constraints": "NOT NULL"},
                 "data_source": {"type": "TEXT", "constraints": "NOT NULL"},
                 "ticker": {"type": "TEXT", "constraints": "NOT NULL"},
                 "total_trades": {"type": "INTEGER", "constraints": "NOT NULL"},
