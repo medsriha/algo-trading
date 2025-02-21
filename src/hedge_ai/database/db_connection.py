@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from .config.crossovers_config import DatabaseCrossoversConfig
 from pathlib import Path
 
+
 @contextmanager
 def get_db_connection(config: DatabaseCrossoversConfig):
     """Context manager for database connections.
@@ -28,24 +29,25 @@ def get_db_connection(config: DatabaseCrossoversConfig):
 
 def check_database_exists(table_name: str) -> bool:
     """Check if the database file exists.
-    
+
     Args:
         config: Database configuration object
-    
+
     Returns:
         bool: True if database exists, False otherwise
     """
     return Path(table_name).exists()
 
+
 def init_db(config: DatabaseCrossoversConfig):
     """Initialize the database with required tables.
-    
+
     Args:
         config: Database configuration object
     """
     # Create directory if it doesn't exist
     config.db_dir.mkdir(parents=True, exist_ok=True)
-    
+
     with get_db_connection(config) as conn:
         cursor = conn.cursor()
         cursor.execute(config.get_create_table_sql())

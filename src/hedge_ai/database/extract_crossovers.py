@@ -16,6 +16,7 @@ class GetCandidateCrossovers:
     This class is used to get the candidate crossovers from the database.
     Use the paramaters to gauge the risk and return of the candidate crossovers.
     """
+
     def __init__(
         self,
         min_return: float = 20.0,

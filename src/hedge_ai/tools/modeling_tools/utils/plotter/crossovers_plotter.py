@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 
 from hedge_ai.tools.modeling_tools.configs.configs import CrossoverConfig
+
 logger = logging.getLogger(__name__)
 
 

@@ -24,7 +24,7 @@ if __name__ == "__main__":
     )
     # Where to save the results
     database_config = DatabaseCrossoversConfig(db_name="crossovers.db", table_name="crossovers")
-    
+
     # Run the algorithm
     with open("/Users/deepset/algo-trading/tickers/large_cap.txt", "r") as f:
         tickers = f.read().splitlines()

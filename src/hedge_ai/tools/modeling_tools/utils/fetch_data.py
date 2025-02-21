@@ -20,12 +20,18 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 class StockDataFetcher:
     """A class to fetch historical stock data from Alpaca API."""
 
-    def __init__(self, api_key: Optional[str] = None, secret_key: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        secret_key: Optional[str] = None,
+        cache_dir: Optional[Union[str, Path]] = None,
+    ):
         """
         Initialize the StockDataFetcher with API credentials.
 
         :param api_key: Alpaca API key. If None, will look for API_KEY in environment
         :param secret_key: Alpaca secret key. If None, will look for SECRET_KEY in environment
+        :param cache_dir: Directory to store cached data. If None, defaults to ./data/cache
         """
         logger.info("Initializing StockDataFetcher")
 
@@ -39,7 +45,12 @@ class StockDataFetcher:
         logger.debug("Creating Alpaca client")
         self.client = StockHistoricalDataClient(api_key=self.api_key, secret_key=self.secret_key)
 
-        self.cache_dir = Path.cwd() / "data" / "cache"
+        # Convert cache_dir to Path object if provided as string
+        if cache_dir is None:
+            self.cache_dir = Path.cwd() / "data" / "cache"
+        else:
+            self.cache_dir = Path.cwd() / "data" / cache_dir if isinstance(cache_dir, str) else cache_dir
+
         logger.info(f"Setting up cache directory at {self.cache_dir}")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -126,6 +137,7 @@ class StockDataFetcher:
         timeframe: str = "1D",
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        columns: Optional[List[str]] = None,
     ) -> pd.DataFrame:
         """
         Fetch historical stock data for given symbol(s).
@@ -174,6 +186,7 @@ class StockDataFetcher:
                 start=start_date,
                 end=end_date,
                 adjustment="all",
+                columns=columns,
             )
 
             logger.info("Sending request to Alpaca API")
