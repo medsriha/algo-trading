@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 
-class StockDataFetcher:
+class AlpacaDataProvider:
     """A class to fetch historical stock data from Alpaca API."""
 
     def __init__(

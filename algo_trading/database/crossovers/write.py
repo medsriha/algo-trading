@@ -3,13 +3,12 @@ This script runs the crossover algorithm on a list of tickers and saves the resu
 The data in the database will be accessible by an agent that will decide which stocks to invest in.
 """
 
-from hedge_ai.tools.modeling_tools.models.crossovers import Crossover
-from hedge_ai.tools.modeling_tools.configs.configs import CrossoverConfig
-from hedge_ai.database.config.crossovers_config import DatabaseCrossoversConfig
+from algo_trading.models.crossovers import Crossover, CrossoverConfig
+from algo_trading.database.crossovers.configs import DatabaseCrossoversConfig
 
 
 if __name__ == "__main__":
-    tickers = ["AAPL"]
+
     # Algorithm configuration
     crossover_config = CrossoverConfig(
         lower_sma=20,

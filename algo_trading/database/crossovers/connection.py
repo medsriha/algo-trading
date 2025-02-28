@@ -1,7 +1,7 @@
 import sqlite3
 import logging
 from contextlib import contextmanager
-from .config.crossovers_config import DatabaseCrossoversConfig
+from algo_trading.database.crossovers.configs import DatabaseCrossoversConfig
 from pathlib import Path
 
 

@@ -1,0 +1,98 @@
+// @version=5
+strategy("SMA Crossover Strategy", overlay=true, initial_capital=10000, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
+
+// Input parameters
+lower_sma_length = input.int(20, "Lower SMA Length", minval=1)
+upper_sma_length = input.int(50, "Upper SMA Length", minval=1)
+rsi_period = input.int(14, "RSI Period", minval=1)
+rsi_oversold = input.int(30, "RSI Oversold Level", minval=1, maxval=100)
+rsi_overbought = input.int(70, "RSI Overbought Level", minval=1, maxval=100)
+rsi_underbought = input.int(50, "RSI Underbought Level", minval=1, maxval=100)
+crossover_length = input.int(10, "Max Pattern Length (Days)", minval=1)
+take_profit = input.float(0.05, "Take Profit (%)", minval=0.01, step=0.01) / 100
+stop_loss = input.float(0.03, "Stop Loss (%)", minval=0.01, step=0.01) / 100
+
+// Calculate indicators
+sma_lower = ta.sma(close, lower_sma_length)
+sma_upper = ta.sma(close, upper_sma_length)
+sma_lower_below_upper = sma_lower < sma_upper
+rsi = ta.rsi(close, rsi_period)
+rsi_oversold_condition = rsi < rsi_oversold
+rsi_overbought_condition = rsi > rsi_overbought
+rsi_underbought_condition = rsi < rsi_underbought
+
+// Plot indicators
+plot(sma_lower, "Lower SMA", color=color.blue)
+plot(sma_upper, "Upper SMA", color=color.red)
+plot(rsi, "RSI", color=color.purple, display=display.none)
+
+// Identify crossunder points (where lower SMA crosses below upper SMA)
+crossunder_point = ta.crossunder(sma_lower, sma_upper)
+in_bearish_period = sma_lower_below_upper
+
+// Calculate trend from crossover
+var float trend_from_crossover = 0.0
+var float crossover_price = na
+
+if (crossunder_point)
+    crossover_price := close
+    trend_from_crossover := 0.0
+
+if (not na(crossover_price) and in_bearish_period)
+    trend_from_crossover := ((close - crossover_price) / crossover_price) * 100
+
+// Pattern detection variables
+var bool in_pattern = false
+var int start_bar = na
+var float initial_price = na
+var int pattern_days = 0
+
+// Entry conditions
+entry_condition = not in_pattern and 
+                 sma_lower_below_upper[1] and 
+                 sma_lower_below_upper and 
+                 in_bearish_period and 
+                 trend_from_crossover > 0 and 
+                 rsi_underbought_condition
+
+// Exit conditions
+exit_price_change = in_pattern ? (close - initial_price) / initial_price : 0
+exit_condition = in_pattern and (
+                 pattern_days >= crossover_length or 
+                 rsi_overbought_condition or 
+                 math.abs(exit_price_change) >= math.max(take_profit, stop_loss))
+
+// Strategy logic
+if (entry_condition)
+    strategy.entry("Crossover", strategy.long)
+    in_pattern := true
+    start_bar := bar_index
+    initial_price := close
+    pattern_days := 0
+
+if (in_pattern)
+    pattern_days := bar_index - start_bar
+    
+    if (exit_condition)
+        strategy.close("Crossover")
+        in_pattern := false
+        start_bar := na
+        initial_price := na
+        pattern_days := 0
+
+// Visualizations
+bgcolor(in_pattern ? color.new(color.green, 90) : na)
+plotshape(entry_condition, "Entry Signal", shape.triangleup, location.belowbar, color.green, size=size.small)
+plotshape(exit_condition, "Exit Signal", shape.triangledown, location.abovebar, color.red, size=size.small)
+
+// Display current pattern information
+var label info_label = na
+if (barstate.islast)
+    info_label := label.new(bar_index, high, 
+                           text="Pattern Status: " + (in_pattern ? "Active" : "Inactive") + 
+                           "\nDays in Pattern: " + str.tostring(pattern_days) + 
+                           "\nTrend from Crossover: " + str.tostring(trend_from_crossover, "#.##") + "%", 
+                           color=color.new(color.blue, 80), 
+                           textcolor=color.white,
+                           style=label.style_label_down)
+    label.delete(info_label[1]) 

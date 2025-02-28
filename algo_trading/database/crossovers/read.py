@@ -4,14 +4,14 @@ from pathlib import Path
 # Add the project root directory to Python path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from hedge_ai.database.config.crossovers_config import DatabaseCrossoversConfig
+from algo_trading.database.crossovers.configs import DatabaseCrossoversConfig
 from pathlib import Path
 from typing import Optional
 import logging
 import sqlite3
 
 
-class GetCandidateCrossovers:
+class FindCandidateCrossovers:
     """
     This class is used to get the candidate crossovers from the database.
     Use the paramaters to gauge the risk and return of the candidate crossovers.

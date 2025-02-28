@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "hedge-ai"
-version = "0.0.1"
-description = "Hedge AI"
+name = "algo-trading"
+version = "0.1.0"
+description = "Algorithmic Trading Platform"
 authors = [
     { name = "Mohamed Sriha", email = "medsriha@gmail.com" },
 ]
@@ -22,6 +22,8 @@ dependencies = [
     "langgraph>=0.2.72",
     "python-dotenv>=1.0.1",
     "langchain-openai>=0.3.6",
+    "sqlalchemy>=2.0.0",
+    "pydantic>=2.0.0",
 ]
 
 # Development Dependencies
@@ -32,18 +34,16 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.0",
     "types-requests>=2.28.0",
-    "types-google-auth>=3.0.0",
-    "types-google-auth-oauthlib>=1.0.0",
 ]
 
 # Build Configuration
 [tool.hatch.build]
 include = [
-    "src/hedge_ai/**/*.py",
+    "algo_trading/**/*.py",
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/hedge_ai"]
+packages = ["algo_trading"]
 
 # Environment Configurations
 [tool.hatch.envs.default]
@@ -64,18 +64,13 @@ dependencies = [
     "mypy>=1.0",
     "pytest-cov>=4.1.0",
     "pylint>=3.0.0",
-    "fastapi>=0.115.6",
-    "uvicorn>=0.34.0"
 ]
 
 [tool.hatch.envs.test.scripts]
-e2e = "pytest e2e"
-unit = 'pytest --cov-report xml:coverage.xml --cov="email_adapt" -m "not integration" {args:test}'
-integration = 'pytest --maxfail=5 -m "integration" {args:test}'
-integration-mac = 'pytest --maxfail=5 -m "integration" -k "not tika" {args:test}'
-integration-windows = 'pytest --maxfail=5 -m "integration" -k "not tika" {args:test}'
-types = "mypy email_adapt --non-interactive --install-types"
-lint = "pylint -ry -j 0 {args:email_adapt}"
+unit = 'pytest --cov-report xml:coverage.xml --cov="algo_trading" -m "not integration" {args:tests}'
+integration = 'pytest --maxfail=5 -m "integration" {args:tests}'
+types = "mypy algo_trading --non-interactive --install-types"
+lint = "pylint -ry -j 0 {args:algo_trading}"
 
 # Code Formatting Tools
 [tool.black]
@@ -94,7 +89,7 @@ ignore_missing_imports = true
 cache_dir = ".mypy_cache"
 namespace_packages = true
 explicit_package_bases = true
-mypy_path = "email_adapt"
+mypy_path = "algo_trading"
 
 [tool.ruff]
 line-length = 120
@@ -144,4 +139,4 @@ max-complexity = 10
 convention = "google"
 
 [tool.ruff.isort]
-known-first-party = ["hedge_ai"]
+known-first-party = ["algo_trading"]

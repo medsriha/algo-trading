@@ -12,7 +12,7 @@ from hedge_ai.tools.modeling_tools.utils.plotter.crossovers_plotter import Cross
 from hedge_ai.tools.modeling_tools.utils.writter.crossovers_report_writter import CrossoversReportWriter
 from hedge_ai.database.config.crossovers_config import DatabaseCrossoversConfig
 from hedge_ai.database.db_connection import check_database_exists, init_db, get_db_connection
-from hedge_ai.tools.modeling_tools.configs.configs import CrossoverConfig
+from src.hedge_ai.tools.modeling_tools.configs.config import CrossoverConfig
 
 
 logger = logging.getLogger(__name__)
