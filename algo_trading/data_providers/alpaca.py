@@ -35,8 +35,8 @@ class AlpacaDataProvider:
         """
         logger.info("Initializing StockDataFetcher")
 
-        self.api_key = api_key or os.getenv("API_KEY")
-        self.secret_key = secret_key or os.getenv("SECRET_KEY")
+        self.api_key = api_key or os.getenv("ALPACA_API_KEY")
+        self.secret_key = secret_key or os.getenv("ALPACA_SECRET_KEY")
 
         if not self.api_key or not self.secret_key:
             logger.error("API credentials missing")
