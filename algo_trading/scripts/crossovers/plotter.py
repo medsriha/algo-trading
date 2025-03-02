@@ -4,7 +4,7 @@ import numpy as np
 import logging
 from pathlib import Path
 
-from hedge_ai.tools.modeling_tools.configs.config import CrossoverConfig
+from algo_trading.models.crossovers import CrossoverConfig
 
 logger = logging.getLogger(__name__)
 
@@ -87,10 +87,10 @@ class CrossoversPlotter:
                     (exit_row["timestamp"], exit_row["close"]),
                     xytext=(0, -20),
                     textcoords="offset points",
-                    arrowprops=dict(facecolor="green", shrink=0.05),
+                    arrowprops=dict(facecolor="purple", shrink=0.05),
                     ha="center",
                     va="top",
-                    color="green",
+                    color="purple",
                     fontweight="bold",
                 )
 
@@ -115,10 +115,10 @@ class CrossoversPlotter:
                     (exit_row["timestamp"], exit_row["close"]),
                     xytext=(0, -20),
                     textcoords="offset points",
-                    arrowprops=dict(facecolor="red", shrink=0.05),
+                    arrowprops=dict(facecolor="purple", shrink=0.05),
                     ha="center",
                     va="top",
-                    color="red",
+                    color="purple",
                     fontweight="bold",
                 )
 
@@ -239,7 +239,7 @@ class CrossoversPlotter:
             filepath = self.output_path
             filepath.mkdir(parents=True, exist_ok=True)
             plt.savefig(filepath / filename, dpi=300, bbox_inches="tight")
-            logger.info(f"[crossover][{self.ticker}] Plot saved to {filepath}")
+            logger.info(f"[crossover][{self.ticker}] Plot saved to {filepath / filename}")
 
             # Clear the current figure and close to free memory
             plt.clf()

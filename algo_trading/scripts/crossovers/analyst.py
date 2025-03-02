@@ -2,12 +2,12 @@ from datetime import datetime
 import logging
 import pandas as pd
 from pathlib import Path
-from hedge_ai.tools.modeling_tools.configs.config import CrossoverConfig
+from algo_trading.models.crossovers import CrossoverConfig
 
 logger = logging.getLogger(__name__)
 
 
-class CrossoversReportWriter:
+class CrossoversAnalyst:
     def __init__(self, frame: pd.DataFrame, ticker: str, crossover_config: CrossoverConfig, output_path: Path):
         """Initialize the CrossoverReportWriter.
 
@@ -23,12 +23,75 @@ class CrossoversReportWriter:
         self.output_path = output_path
 
     def _write_config_section(self, f):
-        """Helper method to write configuration section."""
-        f.write(f"=== Configuration ===\n")
+        """Write strategy configuration and parameters."""
+        f.write("=== Strategy Configuration ===\n")
+        f.write(f"Strategy: SMA Crossover with RSI Filter\n")
+        f.write(f"Fast SMA Period: {self.crossover_config.lower_sma} days\n")
+        f.write(f"Slow SMA Period: {self.crossover_config.upper_sma} days\n")
+        f.write(f"RSI Period: {self.crossover_config.rsi_period} days\n")
+        f.write(f"RSI Oversold Level: {self.crossover_config.rsi_oversold}\n")
+        f.write(f"RSI Overbought Level: {self.crossover_config.rsi_overbought}\n")
+        f.write(f"RSI Entry Level: {self.crossover_config.rsi_underbought}\n")
+        f.write(f"Maximum Trade Duration: {self.crossover_config.crossover_length} days\n")
         f.write(f"Take Profit: {self.crossover_config.take_profit * 100:.1f}%\n")
-        f.write(f"Stop Loss: {self.crossover_config.stop_loss * 100:.1f}%\n")
-        f.write(f"Trade Length: {self.crossover_config.crossover_length} days\n")
-        f.write(f"SMAs: {self.crossover_config.lower_sma}/{self.crossover_config.upper_sma}\n\n")
+        f.write(f"Stop Loss: {self.crossover_config.stop_loss * 100:.1f}%\n\n")
+
+    def _write_executive_summary(self, f, total_gains, total_losses, bearish_periods):
+        """Write an executive summary of the strategy performance."""
+        total_trades = total_gains + total_losses
+        win_rate = (total_gains / total_trades * 100) if total_trades > 0 else 0
+
+        # Calculate overall return
+        total_return = 0
+        for pattern_type in ["gain", "loss"]:
+            pattern_data = self.frame[self.frame[pattern_type] > 0]
+            for pattern_id in pattern_data[pattern_type].unique():
+                data = pattern_data[pattern_data[pattern_type] == pattern_id]
+                start_price = data["close"].iloc[0]
+                end_price = data["close"].iloc[-1]
+                total_return += ((end_price - start_price) / start_price) * 100
+
+        f.write("=== Executive Summary ===\n")
+        f.write(f"Ticker: {self.ticker}\n")
+        f.write(
+            f"Analysis Period: {self.frame['timestamp'].min().strftime('%Y-%m-%d')} to {self.frame['timestamp'].max().strftime('%Y-%m-%d')}\n"
+        )
+        f.write(f"Total Trading Days: {len(self.frame)}\n")
+        f.write(f"Total Trades: {total_trades}\n")
+        f.write(f"Winning Trades: {total_gains}\n")
+        f.write(f"Losing Trades: {total_losses}\n")
+        f.write(f"Win Rate: {win_rate:.1f}%\n")
+        f.write(f"Total Return: {total_return:+.2f}%\n")
+        f.write(f"Average Return per Trade: {(total_return / total_trades if total_trades > 0 else 0):+.2f}%\n")
+        f.write(f"Number of Bearish Periods: {len(bearish_periods)}\n\n")
+
+    def _write_risk_metrics(self, f):
+        """Write risk-related metrics for the strategy."""
+        f.write("=== Risk Metrics ===\n")
+
+        # Calculate drawdowns for all patterns
+        max_drawdown = 0
+        avg_drawdown = 0
+        drawdown_count = 0
+
+        for pattern_type in ["gain", "loss"]:
+            pattern_data = self.frame[self.frame[pattern_type] > 0]
+            for pattern_id in pattern_data[pattern_type].unique():
+                data = pattern_data[pattern_data[pattern_type] == pattern_id]
+                start_price = data["close"].iloc[0]
+                lowest_price = data["close"].min()
+                drawdown = ((lowest_price - start_price) / start_price) * 100
+                max_drawdown = min(max_drawdown, drawdown)
+                avg_drawdown += drawdown
+                drawdown_count += 1
+
+        avg_drawdown = avg_drawdown / drawdown_count if drawdown_count > 0 else 0
+
+        f.write(f"Maximum Drawdown: {max_drawdown:.2f}%\n")
+        f.write(f"Average Drawdown: {avg_drawdown:.2f}%\n")
+        f.write(
+            f"Risk/Reward Ratio: {abs(self.crossover_config.take_profit / self.crossover_config.stop_loss):.2f}\n\n"
+        )
 
     def _write_trade_analysis(self, f, pattern_type, total_patterns, pattern_column):
         """Helper method to write pattern price analysis."""
@@ -173,19 +236,31 @@ class CrossoversReportWriter:
             f.write(f"  Trend Direction: {'Upward' if period['is_uptrend'] else 'Downward'}\n")
 
     def write(self, total_gains, total_losses, bearish_periods, output_file="report.txt"):
-        """Write pattern statistics to a file."""
-        logger.info(f"[crossover][{self.ticker}] Writing trade statistics to {output_file}")
+        """Write comprehensive analysis report."""
+        logger.info(f"[crossover][{self.ticker}] Writing analysis report to {output_file}")
 
-        with open(self.output_path / output_file, "w") as f:
+        self.output_path.mkdir(parents=True, exist_ok=True)
+        output_path = self.output_path / output_file
+
+        with open(output_path, "w") as f:
+            # Write report sections in logical order
+            self._write_executive_summary(f, total_gains, total_losses, bearish_periods)
             self._write_config_section(f)
-            f.write("=== Price Level Analysis ===\n")
-            self._write_trade_analysis(f, "Gain", total_gains, "gain")
-            self._write_trade_analysis(f, "Loss", total_losses, "loss")
-            self._write_basic_stats(f)
+            self._write_risk_metrics(f)
+
+            # Add trade-by-trade analysis
+            self._write_trade_analysis(f, "Winning", total_gains, "gain")
+            self._write_trade_analysis(f, "Losing", total_losses, "loss")
+
             self._write_pattern_performance_summary(f)
             self._write_rsi_analysis(f)
             self._write_bearish_periods_analysis(f, bearish_periods)
             self._write_bearish_period_details(f, bearish_periods)
-            f.write(f"\nAnalysis generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
-        logger.info(f"[crossover][{self.ticker}] Statistics written to {output_file}")
+            # Add timestamp
+            f.write(f"\nReport generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(
+                "\nDisclaimer: Past performance does not guarantee future results. This analysis is for informational purposes only.\n"
+            )
+
+        logger.info(f"[crossover][{self.ticker}] Analysis report written to {output_path}")

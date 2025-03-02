@@ -7,12 +7,11 @@ from datetime import datetime
 import pandas as pd
 import talib
 
-from hedge_ai.tools.modeling_tools.utils.fetch_data import StockDataFetcher
-from hedge_ai.tools.modeling_tools.utils.plotter.crossovers_plotter import CrossoversPlotter
-from hedge_ai.tools.modeling_tools.utils.writter.crossovers_report_writter import CrossoversReportWriter
-from hedge_ai.database.config.crossovers_config import DatabaseCrossoversConfig
-from hedge_ai.database.db_connection import check_database_exists, init_db, get_db_connection
-from src.hedge_ai.tools.modeling_tools.configs.config import CrossoverConfig
+from algo_trading.data_providers import AlpacaDataProvider
+from algo_trading.scripts.crossovers import CrossoversPlotter, CrossoversAnalyst
+from algo_trading.database.crossovers.configs import DatabaseCrossoversConfig
+from algo_trading.database.crossovers.connection import check_database_exists, init_db, get_db_connection
+from algo_trading.models.crossovers import CrossoverConfig
 
 
 logger = logging.getLogger(__name__)
@@ -33,7 +32,11 @@ class Crossover:
         self.crossover_config = crossover_config
         self.output_path = self.DATA_DIR
         self.database_config = database_config
-
+        logger.info(f"Initializing database for {database_config.table_name}")
+        logger.info(f"Checking if database exists: {check_database_exists(database_config.table_name)}")
+        logger.info(f"Plotter and analysis will be saved in the output path {self.output_path}")
+        # Create the output directory if it doesn't exist
+        os.makedirs(self.output_path, exist_ok=True)
         if not check_database_exists(database_config.table_name):
             logger.info(f"Initializing database for {database_config.table_name}")
             init_db(database_config)
@@ -44,7 +47,7 @@ class Crossover:
 
     def _download_data(self) -> None:
         """Download and save data for all tickers."""
-        fetcher = StockDataFetcher()
+        fetcher = AlpacaDataProvider()
         for ticker in self.tickers:
             df = fetcher.get_stock_data(
                 ticker, start_date=self.crossover_config.start_date, end_date=self.crossover_config.end_date
@@ -109,7 +112,6 @@ class Crossover:
 
             # Log current conditions
             conditions = {
-                "in_pattern": pattern_state["in_pattern"],
                 "previous_bearish": frame.iloc[i - 1]["SMA_lower_below_upper"],
                 "current_bearish": frame.iloc[i]["SMA_lower_below_upper"],
                 "crossunder": frame.iloc[i]["crossunder_point"],
@@ -232,8 +234,13 @@ class Crossover:
                 df = self._prepare_data(df)
                 df = self.find(df)
 
+                # Ensure the ticker output directory exists
+                ticker_output_path = self.output_path / ticker
+                os.makedirs(ticker_output_path, exist_ok=True)
+
                 # Save results
-                df.to_csv(self.output_path / ticker / "crossovers.csv", index=False)
+                df.to_csv(ticker_output_path / "crossovers.csv", index=False)
+                logger.info(f"Saved crossovers data to {ticker_output_path / 'crossovers.csv'}")
 
                 total_gains = self.total_gains(df)
                 total_losses = self.total_losses(df)
@@ -449,19 +456,23 @@ class Crossover:
         self, df: pd.DataFrame, ticker: str, bearish_periods: List[Dict[str, Any]], metrics: Dict[str, float]
     ) -> None:
         """Generate visualizations and report for the given ticker."""
+        # Ensure the output directory exists
+        ticker_output_path = self.output_path / ticker
+        os.makedirs(ticker_output_path, exist_ok=True)
+
         plotter = CrossoversPlotter(
             df=df,
             ticker=ticker,
             crossover_config=self.crossover_config,
-            output_path=self.output_path / ticker,
+            output_path=ticker_output_path,
         )
         plotter.save_plot(bearish_periods=bearish_periods)
 
-        report_writer = CrossoversReportWriter(
+        report_writer = CrossoversAnalyst(
             frame=df,
             ticker=ticker,
             crossover_config=self.crossover_config,
-            output_path=self.output_path / ticker,
+            output_path=ticker_output_path,
         )
         report_writer.write(
             total_gains=metrics["total_gains"],
