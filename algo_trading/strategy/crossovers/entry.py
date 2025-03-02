@@ -6,8 +6,8 @@ from dotenv import load_dotenv
 import logging
 from typing import Union, List, Optional
 import pandas as pd
-from hedge_ai.tools.modeling_tools.utils.fetch_data import StockDataFetcher
-from hedge_ai.tools.modeling_tools.models.crossovers.crossovers import CrossoverConfig
+from algo_trading.data_providers import AlpacaDataProvider
+from algo_trading.models import CrossoverConfig
 import talib
 
 load_dotenv()
@@ -18,14 +18,14 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 
-class MarketDataManager:
+class CrossoverEntry:
     """Class to manage market data operations and calculations."""
 
     def __init__(
         self,
-        api_key: Optional[str] = os.getenv("ALPACA_API_KEY"),
-        api_secret: Optional[str] = os.getenv("ALPACA_SECRET_KEY"),
-        crossover_config: Optional[CrossoverConfig] = None,
+        api_key: Optional[str] = None,
+        api_secret: Optional[str] = None,
+        crossover_config: Optional[CrossoverConfig] = CrossoverConfig(),
         cache_dir: Optional[str] = "market_data_cache",
     ):
         """Initialize the MarketDataManager.
@@ -35,16 +35,12 @@ class MarketDataManager:
             api_secret: Alpaca secret key
             cache_dir: Directory to store cached data
         """
-        self.api_key = api_key
-        self.api_secret = api_secret
         self.cache_dir = cache_dir
         self.crossover_config = crossover_config
+        self.api_key = api_key
+        self.api_secret = api_secret
 
-        if not self.api_key or not self.api_secret:
-            raise ValueError("API credentials not found. Please provide them or set in environment.")
-
-        self.fetcher = StockDataFetcher(api_key=self.api_key, secret_key=self.api_secret, cache_dir=self.cache_dir)
-        
+        self.fetcher = AlpacaDataProvider(api_key=api_key, secret_key=api_secret, cache_dir=self.cache_dir)
 
     def prepare_data(self, frame: pd.DataFrame) -> pd.DataFrame:
         """Prepare and validate the data."""
@@ -158,7 +154,6 @@ class MarketDataManager:
         frame["RSI_overbought"] = frame["RSI"] > self.crossover_config.rsi_overbought
         frame["RSI_under_bought"] = frame["RSI"] < self.crossover_config.rsi_underbought
 
-
         # Add crossunder points
         frame = self._identify_crossover_points(frame)
 
@@ -179,8 +174,8 @@ class MarketDataManager:
 
             headers = {
                 "accept": "application/json",
-                "APCA-API-KEY-ID": self.api_key,
-                "APCA-API-SECRET-KEY": self.api_secret,
+                "APCA-API-KEY-ID": self.api_key or os.getenv("ALPACA_API_KEY"),
+                "APCA-API-SECRET-KEY": self.api_secret or os.getenv("ALPACA_SECRET_KEY"),
             }
 
             response = requests.get(url, headers=headers)
@@ -194,11 +189,7 @@ class MarketDataManager:
                     # Convert to date only and remove timezone
                     timestamp = pd.to_datetime(ticker_data["dailyBar"]["t"]).date()
 
-                    rows.append({
-                        "symbol": ticker,
-                        "timestamp": timestamp,
-                        "close": close
-                    })
+                    rows.append({"symbol": ticker, "timestamp": timestamp, "close": close})
                     logger.debug(f"Closing price for {ticker}: {close}")
                 except (KeyError, TypeError) as e:
                     logger.error(f"Error processing data for {ticker}: {e}")
@@ -224,7 +215,7 @@ class MarketDataManager:
                 timeframe="1D",
                 start_date=start_date,
                 end_date=end_date,
-                columns=["symbol", "timestamp", "close"]  # Only request needed columns
+                columns=["symbol", "timestamp", "close"],  # Only request needed columns
             )
 
             return df[["symbol", "timestamp", "close"]]
@@ -240,7 +231,7 @@ class MarketDataManager:
 
             if hist_df.empty:
                 raise Exception("Historical data is empty")
-            
+
             hist_df["timestamp"] = pd.to_datetime(hist_df["timestamp"]).dt.date
 
             current_df = self.get_todays_close(tickers)
@@ -259,40 +250,39 @@ class MarketDataManager:
             logger.error(f"Failed to fetch market data: {e}")
             raise
 
-    def is_today_an_entry(self, frame: pd.DataFrame) -> bool:
-        """Return true if today meets entry criteria"""
-        if len(frame) < 2:  # Need at least 2 days of data
-            return False
-        
-        # Get last two rows
-        yesterday = frame.iloc[-2]
-        today = frame.iloc[-1]
-        
-        # Check all conditions at once
-        return (yesterday["SMA_lower_below_upper"] and  # previous day bearish
-                today["SMA_lower_below_upper"] and      # current day bearish
-                today["crossunder_point"] and           # in valid crossunder period
-                today["trend_from_crossover"] > 0 and   # upward trend from crossover
-                today["RSI"] < self.crossover_config.rsi_underbought)  # RSI below threshold
+    def is_today_an_entry(self, frame: pd.DataFrame) -> dict[str, bool]:
+        """Return true if today meets entry criteria based on the crossover strategy.
 
+        The entry criteria are:
+        1. Must be in a valid crossunder period (SMA_lower below SMA_upper)
+        2. Must have seen the actual crossover point
+        3. Must be in an uptrend from the crossover point
+        4. RSI must be below the underbought threshold
+        5. Must not be in an overbought RSI condition
+        """
+        results = {}
+        for ticker, group in frame.groupby("symbol"):
+            if len(group) < 2:  # Need at least 2 days of data
+                return False
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+            # Get last two rows
+            yesterday = group.iloc[-2]
+            today = group.iloc[-1]
 
-    try:
-        crossover_config = CrossoverConfig(
-            lower_sma=20,
-            upper_sma=50,
-            rsi_period=14,
-            rsi_oversold=30,
-            rsi_overbought=70,
-            rsi_underbought=50,  # Dont buy if RSI is over 50
-        )
-        manager = MarketDataManager(crossover_config=crossover_config)
-        test_tickers = ["AAPL"]
-        market_data = manager.get_market_data(test_tickers)
-        print(manager.is_today_an_entry(market_data))
-        market_data.to_csv("market_data.csv", index=False)
+            # Check all conditions for entry
+            conditions = {
+                "in_valid_crossunder": today["crossunder_point"],  # Must be in valid crossunder period
+                "upward_trend": today["trend_from_crossover"] > 0,  # Must be in uptrend from crossover
+                "rsi_below_threshold": today["RSI"] < self.crossover_config.rsi_underbought,  # RSI below threshold
+                "not_overbought": not today["RSI_overbought"],  # Not in overbought condition
+                "bearish_continuation": yesterday["SMA_lower_below_upper"]
+                and today["SMA_lower_below_upper"],  # Still in bearish period
+            }
 
-    except Exception as e:
-        logging.error(f"Test failed: {e}")
+            # Log conditions for debugging
+            logger.debug(f"Entry conditions: {conditions}")
+
+            # Return True only if all conditions are met
+            results[ticker] = all(conditions.values())
+
+        return results
