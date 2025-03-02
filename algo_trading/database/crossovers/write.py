@@ -8,7 +8,6 @@ from algo_trading.database.crossovers.configs import DatabaseCrossoversConfig
 
 
 if __name__ == "__main__":
-
     # Algorithm configuration
     crossover_config = CrossoverConfig(
         lower_sma=20,
@@ -25,7 +24,7 @@ if __name__ == "__main__":
     database_config = DatabaseCrossoversConfig(db_name="crossovers.db", table_name="crossovers")
 
     # Run the algorithm
-    with open("/Users/deepset/algo-trading/tickers/large_cap.txt", "r") as f:
+    with open("/Users/deepset/algo-trading/tickers/large_cap_tickers.txt", "r") as f:
         tickers = f.read().splitlines()
     crossover = Crossover(tickers, crossover_config, database_config)
     crossover.run()

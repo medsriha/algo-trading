@@ -20,26 +20,22 @@ class FindCandidateCrossovers:
     def __init__(
         self,
         min_return: float = 20.0,
-        min_total_trades: int = 6,
-        min_number_gains: int = 5,
+        min_total_trades: int = 5,
         max_number_losses: int = 2,
-        all_bearish_uptrend: bool = True,
-        num_candidates: Optional[int] = 10,
+        num_candidates: Optional[int] = 20,
         config: DatabaseCrossoversConfig = None,
     ):
         self.min_return = min_return
         self.min_total_trades = min_total_trades
-        self.min_number_gains = min_number_gains
         self.max_number_losses = max_number_losses
-        self.all_bearish_uptrend = all_bearish_uptrend
         self.num_candidates = num_candidates or 10
         self.config = config
         self.logger = logging.getLogger(__name__)
         self.logger.info(
             f"Initialized GetCandidateCrossovers with parameters: "
             f"min_return={min_return}, min_total_trades={min_total_trades}, "
-            f"min_number_gains={min_number_gains}, max_number_losses={max_number_losses}, "
-            f"all_bearish_uptrend={all_bearish_uptrend}"
+            f"max_number_losses={max_number_losses}, "
+    
         )
 
     def retrieve_candidates(self) -> list[str]:
@@ -54,31 +50,33 @@ class FindCandidateCrossovers:
         cursor = conn.cursor()
 
         sql = f"""
-            SELECT DISTINCT ticker 
-            FROM {self.config.table_name}
-            WHERE total_gains >= ?
-                AND total_losses <= ?
-                AND all_bearish_uptrend = ?
-                AND combined_return >= ?
-            ORDER BY combined_return DESC
+            WITH LatestData AS (
+                SELECT ticker, MAX(data_creation_date) as latest_date
+                FROM {self.config.table_name}
+                GROUP BY ticker
+            )
+            SELECT DISTINCT c.ticker, c.data_creation_date
+            FROM {self.config.table_name} c
+            JOIN LatestData ld ON c.ticker = ld.ticker AND c.data_creation_date = ld.latest_date
+            WHERE c.total_losses <= ?
+                AND c.combined_return >= ?
+            ORDER BY c.combined_return DESC
             LIMIT ?
         """
 
         try:
-            self.logger.debug("Executing SQL query to retrieve candidates")
+            self.logger.debug("Executing SQL query to retrieve candidates with latest data")
             cursor.execute(
                 sql,
                 (
-                    self.min_number_gains,
                     self.max_number_losses,
-                    self.all_bearish_uptrend,
                     self.min_return,
                     self.num_candidates,
                 ),
             )
 
             # Fetch all results and extract ticker symbols
-            candidates = [row[0] for row in cursor.fetchall()]
+            candidates = [row for row in cursor.fetchall()]
             self.logger.info(f"Retrieved {len(candidates)} candidate stocks")
             self.logger.debug(f"Candidates: {candidates}")
 
