@@ -14,3 +14,8 @@ venv/
 .DS_Store
 *.db
 *.log
+/public
+.cache
+node_modules
+yarn-error.log
+package-lock.json
