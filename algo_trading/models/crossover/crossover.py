@@ -8,14 +8,14 @@ import pandas as pd
 import talib
 
 from algo_trading.data_providers import AlpacaDataProvider
-from algo_trading.scripts.crossovers import CrossoversPlotter, CrossoversAnalyst
-from algo_trading.database.crossovers.configs import DatabaseCrossoversConfig
-from algo_trading.database.crossovers.connection import check_database_exists, init_db, get_db_connection
-from algo_trading.models.crossovers import CrossoverConfig
+from algo_trading.scripts import CrossoverPlotter, CrossoverAnalyst
+from algo_trading.database import DatabaseCrossoverConfig
+from algo_trading.database.crossover.connection import check_database_exists, init_db, get_db_connection
+from algo_trading.models.crossover import CrossoverConfig
 
 
 logger = logging.getLogger(__name__)
-
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 class Crossover:
     # Class constants
@@ -23,7 +23,7 @@ class Crossover:
     PATTERN_TYPES = ("gain", "loss")
 
     def __init__(
-        self, tickers: List[str], crossover_config: CrossoverConfig, database_config: DatabaseCrossoversConfig
+        self, tickers: List[str], crossover_config: CrossoverConfig, database_config: DatabaseCrossoverConfig
     ) -> None:
         if not isinstance(tickers, list):
             raise TypeError("Tickers must be a list")
@@ -43,6 +43,7 @@ class Crossover:
         else:
             logger.info(f"Database for {database_config.table_name} already exists")
 
+        logger.info(f"Downloading data for {len(self.tickers)} tickers")
         self._download_data()
 
     def _download_data(self) -> None:
@@ -175,7 +176,7 @@ class Crossover:
 
         return frame
 
-    def store_results(self, metrics: Dict[str, Any]) -> bool:
+    def store_results_db(self, metrics: Dict[str, Any]) -> bool:
         """Store analysis results in the database.
 
         Args:
@@ -239,8 +240,8 @@ class Crossover:
                 os.makedirs(ticker_output_path, exist_ok=True)
 
                 # Save results
-                df.to_csv(ticker_output_path / "crossovers.csv", index=False)
-                logger.info(f"Saved crossovers data to {ticker_output_path / 'crossovers.csv'}")
+                df.to_csv(ticker_output_path / "crossover.csv", index=False)
+                logger.info(f"Saved crossover data to {ticker_output_path / 'crossover.csv'}")
 
                 total_gains = self.total_gains(df)
                 total_losses = self.total_losses(df)
@@ -259,7 +260,7 @@ class Crossover:
                     "combined_return": self.combined_return(df),
                 }
                 # Store results in database
-                if not self.store_results(results):
+                if not self.store_results_db(results):
                     logger.error(f"Failed to store results for {ticker}")
 
                 # Generate visualizations and report
@@ -460,7 +461,7 @@ class Crossover:
         ticker_output_path = self.output_path / ticker
         os.makedirs(ticker_output_path, exist_ok=True)
 
-        plotter = CrossoversPlotter(
+        plotter = CrossoverPlotter(
             df=df,
             ticker=ticker,
             crossover_config=self.crossover_config,
@@ -468,13 +469,13 @@ class Crossover:
         )
         plotter.save_plot(bearish_periods=bearish_periods)
 
-        report_writer = CrossoversAnalyst(
+        report_writer = CrossoverAnalyst(
             frame=df,
             ticker=ticker,
             crossover_config=self.crossover_config,
             output_path=ticker_output_path,
         )
-        report_writer.write(
+        report_writer.save_report(
             total_gains=metrics["total_gains"],
             total_losses=metrics["total_losses"],
             bearish_periods=bearish_periods,

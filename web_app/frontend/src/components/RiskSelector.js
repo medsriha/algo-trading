@@ -5,6 +5,7 @@ import BalanceIcon from '@mui/icons-material/Balance';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import InfoIcon from '@mui/icons-material/Info';
 import { motion } from 'framer-motion';
+import { THEME_CONSTANTS } from '../index';
 
 const RiskSelector = ({ onSelect, selectedRisk }) => {
   const [risk, setRisk] = React.useState('');
@@ -22,15 +23,15 @@ const RiskSelector = ({ onSelect, selectedRisk }) => {
   // Define risk option information
   const riskInfo = {
     conservative: {
-      icon: <SecurityIcon sx={{ color: '#4caf50' }} />,
+      icon: <SecurityIcon sx={{ color: THEME_CONSTANTS.colors.success }} />,
       description: 'Lower risk, more stable returns, fewer losses'
     },
     moderate: {
-      icon: <BalanceIcon sx={{ color: '#2196f3' }} />,
+      icon: <BalanceIcon sx={{ color: THEME_CONSTANTS.colors.primary }} />,
       description: 'Balanced approach with moderate risk and return potential'
     },
     aggressive: {
-      icon: <TrendingUpIcon sx={{ color: '#f44336' }} />,
+      icon: <TrendingUpIcon sx={{ color: THEME_CONSTANTS.colors.error }} />,
       description: 'Higher risk for potentially greater returns, more tolerance for losses'
     }
   };
@@ -59,9 +60,9 @@ const RiskSelector = ({ onSelect, selectedRisk }) => {
             onChange={handleChange}
             label="Risk Profile"
             sx={{ 
-              borderRadius: 2,
+              borderRadius: THEME_CONSTANTS.radius.small,
               '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: 'rgba(255, 255, 255, 0.23)'
+                borderColor: THEME_CONSTANTS.colors.border
               }
             }}
           >
@@ -82,7 +83,7 @@ const RiskSelector = ({ onSelect, selectedRisk }) => {
           onClick={handleSubmit}
           disabled={!risk}
           sx={{ 
-            borderRadius: 2, 
+            borderRadius: THEME_CONSTANTS.radius.small, 
             py: 1.5,
             px: 4,
             minWidth: { xs: '100%', sm: '150px' }
@@ -102,13 +103,14 @@ const RiskSelector = ({ onSelect, selectedRisk }) => {
             display: 'flex', 
             alignItems: 'center', 
             gap: 1.5,
-            bgcolor: 'rgba(255, 255, 255, 0.05)',
+            bgcolor: THEME_CONSTANTS.colors.background,
             p: 2,
-            borderRadius: 2,
-            mb: 3
+            borderRadius: THEME_CONSTANTS.radius.small,
+            mb: 3,
+            border: `1px solid ${THEME_CONSTANTS.colors.border}`
           }}>
-            <InfoIcon sx={{ color: '#64b5f6' }} />
-            <Box sx={{ color: '#ccc' }}>
+            <InfoIcon sx={{ color: THEME_CONSTANTS.colors.primary }} />
+            <Box sx={{ color: THEME_CONSTANTS.colors.textSecondary }}>
               {riskInfo[risk].description}
             </Box>
           </Box>

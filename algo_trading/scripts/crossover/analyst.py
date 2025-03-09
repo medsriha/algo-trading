@@ -2,12 +2,12 @@ from datetime import datetime
 import logging
 import pandas as pd
 from pathlib import Path
-from algo_trading.models.crossovers import CrossoverConfig
+from algo_trading.models.crossover import CrossoverConfig
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
-
-class CrossoversAnalyst:
+class CrossoverAnalyst:
     def __init__(self, frame: pd.DataFrame, ticker: str, crossover_config: CrossoverConfig, output_path: Path):
         """Initialize the CrossoverReportWriter.
 
@@ -235,12 +235,16 @@ class CrossoversAnalyst:
             )
             f.write(f"  Trend Direction: {'Upward' if period['is_uptrend'] else 'Downward'}\n")
 
-    def write(self, total_gains, total_losses, bearish_periods, output_file="report.txt"):
+    def save_report(self, total_gains, total_losses, bearish_periods, output_file="report.txt"):
         """Write comprehensive analysis report."""
         logger.info(f"[crossover][{self.ticker}] Writing analysis report to {output_file}")
 
         self.output_path.mkdir(parents=True, exist_ok=True)
         output_path = self.output_path / output_file
+        
+        # Check if file exists and log overwrite
+        if output_path.exists():
+            logger.info(f"[crossover][{self.ticker}] Overwriting existing report file {output_path}")
 
         with open(output_path, "w") as f:
             # Write report sections in logical order

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { motion } from 'framer-motion';
+import { THEME_CONSTANTS } from '../index';
 
 const Loading = () => {
   // Array of loading messages to cycle through
@@ -40,11 +41,17 @@ const Loading = () => {
           py: 6,
           px: 2,
           my: 2,
-          borderRadius: 3,
-          backgroundColor: 'rgba(0, 0, 0, 0.2)',
+          borderRadius: THEME_CONSTANTS.radius.medium,
+          backgroundColor: THEME_CONSTANTS.colors.background,
+          border: `1px solid ${THEME_CONSTANTS.colors.border}`,
+          boxShadow: THEME_CONSTANTS.shadows.small,
         }}
       >
-        <CircularProgress size={60} thickness={4} sx={{ mb: 3 }} />
+        <CircularProgress 
+          size={60} 
+          thickness={4} 
+          sx={{ mb: 3, color: THEME_CONSTANTS.colors.primary }} 
+        />
         
         <motion.div
           key={messageIndex}
@@ -53,12 +60,24 @@ const Loading = () => {
           exit={{ opacity: 0, y: -5 }}
           transition={{ duration: 0.5 }}
         >
-          <Typography variant="h6" align="center" sx={{ mb: 1 }}>
+          <Typography 
+            variant="h6" 
+            align="center" 
+            sx={{ 
+              mb: 1, 
+              color: THEME_CONSTANTS.colors.textPrimary,
+              fontWeight: 600 
+            }}
+          >
             {loadingMessages[messageIndex]}
           </Typography>
         </motion.div>
         
-        <Typography variant="body2" align="center" color="text.secondary">
+        <Typography 
+          variant="body2" 
+          align="center" 
+          sx={{ color: THEME_CONSTANTS.colors.textSecondary }}
+        >
           This may take a minute or two. Please wait...
         </Typography>
       </Box>

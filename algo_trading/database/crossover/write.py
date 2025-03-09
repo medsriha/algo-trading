@@ -3,8 +3,8 @@ This script runs the crossover algorithm on a list of tickers and saves the resu
 The data in the database will be accessible by an agent that will decide which stocks to invest in.
 """
 
-from algo_trading.models.crossovers import Crossover, CrossoverConfig
-from algo_trading.database.crossovers.configs import DatabaseCrossoversConfig
+from algo_trading.models.crossover import Crossover, CrossoverConfig
+from algo_trading.database.crossover.configs import DatabaseCrossoverConfig
 
 
 if __name__ == "__main__":
@@ -21,10 +21,11 @@ if __name__ == "__main__":
         rsi_underbought=50,  # Dont buy if RSI is over 50
     )
     # Where to save the results
-    database_config = DatabaseCrossoversConfig(db_name="crossovers.db", table_name="crossovers")
+    database_config = DatabaseCrossoverConfig(db_name="crossover.db", table_name="crossover")
 
     # Run the algorithm
     with open("/Users/deepset/algo-trading/tickers/large_cap_tickers.txt", "r") as f:
         tickers = f.read().splitlines()
-    crossover = Crossover(tickers, crossover_config, database_config)
+    # Which tickers to run the algorithm on, strategy config and database config
+    crossover = Crossover(tickers=tickers, crossover_config=crossover_config, database_config=database_config)
     crossover.run()

@@ -1,5 +1,5 @@
-from algo_trading.scripts.crossovers.analyst import CrossoversAnalyst
-from algo_trading.scripts.crossovers.plotter import CrossoversPlotter
+from algo_trading.scripts.crossover.analyst import CrossoverAnalyst
+from algo_trading.scripts.crossover.plotter import CrossoverPlotter
 
 
-__all__ = ["CrossoversAnalyst", "CrossoversPlotter"]
+__all__ = ["CrossoverAnalyst", "CrossoverPlotter"]

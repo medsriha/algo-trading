@@ -7,7 +7,7 @@ import logging
 import os.path
 
 from langchain_openai import ChatOpenAI
-from algo_trading.database import DatabaseCrossoversConfig
+from algo_trading.database import DatabaseCrossoverConfig
 from algo_trading.models import CrossoverConfig
 from algo_trading.agents.agents import get_ticker_recommendations
 
@@ -52,9 +52,9 @@ default_crossover_config = CrossoverConfig(
 )
 
 # Define default database config
-default_db_config = DatabaseCrossoversConfig(
-    db_name="crossovers.db", 
-    table_name="crossovers"
+default_db_config = DatabaseCrossoverConfig(
+    db_name="crossover.db", 
+    table_name="crossover"
 )
 
 @app.post("/analyze")
@@ -66,7 +66,7 @@ async def analyze_tickers(request: RiskLevelRequest) -> Dict[str, Any]:
     
     try:
         # Initialize the language model
-        llm = ChatOpenAI(model="gpt-4o-mini")
+        llm = ChatOpenAI(model="gpt-4o")
         
         # Get the agent
         agent_executor = get_ticker_recommendations(
@@ -78,44 +78,34 @@ async def analyze_tickers(request: RiskLevelRequest) -> Dict[str, Any]:
         # Run the agent with the provided risk level
         result = agent_executor.invoke({"risk_level": request.risk_level})
         
-        # Log chart paths to confirm they're included in the response
-        if 'chart_paths' in result:
-            logger.info(f"Chart paths included in response: {list(result['chart_paths'].keys())}")
-        else:
-            logger.warning("No chart paths found in analysis results")
-        
         logger.info(f"Analysis completed successfully")
         return result
     
     except Exception as e:
-        logger.error(f"Error during analysis: {str(e)}")
+        logger.error(f"Error during analysis: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+@app.get("/api/data/{ticker}/{timeframe}/{filename}")
+async def get_ticker_data(ticker: str, timeframe: str, filename: str):
+    """
+    Serve CSV data for a specific ticker
+    """
+    logger.info(f"Received request for {ticker} {timeframe} {filename}")
+    
+    # Use the absolute path as specified
+    file_path = f"/Users/deepset/algo-trading/data/{ticker}/{timeframe}/{filename}"
+    
+    # Check if the file exists
+    if not os.path.isfile(file_path):
+        logger.error(f"File not found: {file_path}")
+        raise HTTPException(status_code=404, detail=f"File not found: {ticker}/{timeframe}/{filename}")
+    
+    logger.info(f"Serving file: {file_path}")
+    return FileResponse(file_path)
 
 @app.get("/")
 async def root():
     """
     Root endpoint to verify the API is running
     """
-    return {"message": "Algo Trading API is running"}
-
-@app.get("/api/chart/{ticker}")
-async def get_ticker_chart(ticker: str):
-    """
-    Serve the chart image for a specific ticker
-    """
-    chart_path = f"/Users/deepset/algo-trading/data/{ticker}/plot.png"
-    
-    try:
-        if not os.path.isfile(chart_path):
-            logger.error(f"Chart not found for ticker: {ticker}")
-            raise HTTPException(status_code=404, detail=f"Chart not found for ticker: {ticker}")
-        
-        logger.info(f"Serving chart for ticker: {ticker}")
-        return FileResponse(
-            chart_path, 
-            media_type="image/png",
-            headers={"Cache-Control": "max-age=3600"}  # Cache for 1 hour
-        )
-    except Exception as e:
-        logger.error(f"Error serving chart for {ticker}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error serving chart: {str(e)}") 
+    return {"message": "Algo Trading API is running"} 

@@ -4,11 +4,11 @@ from typing import Dict, Any
 
 
 @dataclass
-class DatabaseCrossoversConfig:
+class DatabaseCrossoverConfig:
     """Database configuration settings."""
 
-    db_name: str = "crossovers.db"
-    table_name: str = "crossovers"
+    db_name: str = "crossover.db"
+    table_name: str = "crossover"
     db_dir: Path = Path(".")
     columns: Dict[str, Dict[str, Any]] = None
 

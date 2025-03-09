@@ -1,4 +1,3 @@
-from alpaca.data.models import Snapshot
 from datetime import datetime, timedelta
 import requests
 import os
@@ -9,17 +8,17 @@ import pandas as pd
 from algo_trading.data_providers import AlpacaDataProvider
 from algo_trading.models import CrossoverConfig
 import talib
-
+from pathlib import Path
 load_dotenv()
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-load_dotenv()
-
 
 class CrossoverEntry:
     """Class to manage market data operations and calculations."""
+
+    DATA_DIR = Path("data")
 
     def __init__(
         self,
@@ -265,6 +264,7 @@ class CrossoverEntry:
             if len(group) < 2:  # Need at least 2 days of data
                 return False
 
+            group["entry"] = 0
             # Get last two rows
             yesterday = group.iloc[-2]
             today = group.iloc[-1]
@@ -282,7 +282,18 @@ class CrossoverEntry:
             # Log conditions for debugging
             logger.debug(f"Entry conditions: {conditions}")
 
+            is_entry = all(conditions.values())
             # Return True only if all conditions are met
-            results[ticker] = all(conditions.values())
+            results[ticker] = is_entry
+            group.iloc[-2]["entry"] = 1 if is_entry else 0
+            os.makedirs(self.DATA_DIR / ticker / "today", exist_ok=True)
+
+            group.to_csv(self.DATA_DIR / ticker / "today" / "crossover.csv")
 
         return results
+
+
+if __name__ == "__main__":
+    entry = CrossoverEntry()
+    frame = entry.get_market_data(["AAPL"])
+    print(entry.is_today_an_entry(frame))

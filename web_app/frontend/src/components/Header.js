@@ -2,6 +2,7 @@ import React from 'react';
 import { AppBar, Toolbar, Typography, Box } from '@mui/material';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import { motion } from 'framer-motion';
+import { THEME_CONSTANTS } from '../index';
 
 const Header = () => {
   return (
@@ -10,9 +11,10 @@ const Header = () => {
       color="transparent" 
       elevation={0}
       sx={{ 
-        background: 'transparent',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.12)',
-        mb: 3
+        background: THEME_CONSTANTS.colors.cardBackground,
+        borderBottom: `1px solid ${THEME_CONSTANTS.colors.border}`,
+        mb: 3,
+        borderRadius: 0
       }}
     >
       <Toolbar>
@@ -26,17 +28,15 @@ const Header = () => {
               sx={{ 
                 mr: 1.5, 
                 fontSize: '2rem',
-                color: '#3f51b5'
+                color: THEME_CONSTANTS.colors.primary
               }} 
             />
             <Typography 
               variant="h5" 
               component="div" 
               sx={{ 
-                fontWeight: 500,
-                background: 'linear-gradient(45deg, #3f51b5 30%, #f50057 90%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent'
+                fontWeight: 700,
+                color: THEME_CONSTANTS.colors.textPrimary
               }}
             >
               AlgoTrade Pro
@@ -51,7 +51,13 @@ const Header = () => {
           animate={{ x: 0, opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.2 }}
         >
-          <Typography variant="body2" color="text.secondary">
+          <Typography 
+            variant="body2"
+            sx={{ 
+              color: THEME_CONSTANTS.colors.textSecondary,
+              fontWeight: 500
+            }}
+          >
             Powered by AI and Market Intelligence
           </Typography>
         </motion.div>

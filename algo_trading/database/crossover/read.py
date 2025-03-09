@@ -4,14 +4,13 @@ from pathlib import Path
 # Add the project root directory to Python path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from algo_trading.database.crossovers.configs import DatabaseCrossoversConfig
+from algo_trading.database import DatabaseCrossoverConfig
 from pathlib import Path
-from typing import Optional
 import logging
 import sqlite3
 
 
-class FindCandidateCrossovers:
+class FindCandidateCrossover:
     """
     This class is used to get the candidate crossovers from the database.
     Use the paramaters to gauge the risk and return of the candidate crossovers.
@@ -22,17 +21,15 @@ class FindCandidateCrossovers:
         min_return: float = 20.0,
         min_total_trades: int = 5,
         max_number_losses: int = 2,
-        num_candidates: Optional[int] = 20,
-        config: DatabaseCrossoversConfig = None,
+        config: DatabaseCrossoverConfig = None,
     ):
         self.min_return = min_return
         self.min_total_trades = min_total_trades
         self.max_number_losses = max_number_losses
-        self.num_candidates = num_candidates or 10
         self.config = config
         self.logger = logging.getLogger(__name__)
         self.logger.info(
-            f"Initialized GetCandidateCrossovers with parameters: "
+            f"Initialized FindCandidateCrossover with parameters: "
             f"min_return={min_return}, min_total_trades={min_total_trades}, "
             f"max_number_losses={max_number_losses}, "
     
@@ -55,13 +52,13 @@ class FindCandidateCrossovers:
                 FROM {self.config.table_name}
                 GROUP BY ticker
             )
-            SELECT DISTINCT c.ticker, c.data_creation_date
+            SELECT DISTINCT c.ticker, c.combined_return
             FROM {self.config.table_name} c
             JOIN LatestData ld ON c.ticker = ld.ticker AND c.data_creation_date = ld.latest_date
             WHERE c.total_losses <= ?
                 AND c.combined_return >= ?
+                AND c.total_trades >= ?
             ORDER BY c.combined_return DESC
-            LIMIT ?
         """
 
         try:
@@ -71,7 +68,7 @@ class FindCandidateCrossovers:
                 (
                     self.max_number_losses,
                     self.min_return,
-                    self.num_candidates,
+                    self.min_total_trades
                 ),
             )
 

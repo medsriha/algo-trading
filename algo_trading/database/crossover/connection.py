@@ -1,12 +1,12 @@
 import sqlite3
 import logging
 from contextlib import contextmanager
-from algo_trading.database.crossovers.configs import DatabaseCrossoversConfig
+from algo_trading.database import DatabaseCrossoverConfig
 from pathlib import Path
 
 
 @contextmanager
-def get_db_connection(config: DatabaseCrossoversConfig):
+def get_db_connection(config: DatabaseCrossoverConfig):
     """Context manager for database connections.
 
     Args:
@@ -39,7 +39,7 @@ def check_database_exists(table_name: str) -> bool:
     return Path(table_name).exists()
 
 
-def init_db(config: DatabaseCrossoversConfig):
+def init_db(config: DatabaseCrossoverConfig):
     """Initialize the database with required tables.
 
     Args:

@@ -4,12 +4,12 @@ import numpy as np
 import logging
 from pathlib import Path
 
-from algo_trading.models.crossovers import CrossoverConfig
+from algo_trading.models.crossover import CrossoverConfig
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
-
-class CrossoversPlotter:
+class CrossoverPlotter:
     def __init__(self, df: pd.DataFrame, ticker: str, crossover_config: CrossoverConfig, output_path: Path):
         """Initialize the CrossoverPlotter class.
 

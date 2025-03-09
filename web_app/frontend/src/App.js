@@ -6,6 +6,7 @@ import ResultsDisplay from './components/ResultsDisplay';
 import Loading from './components/Loading';
 import Header from './components/Header';
 import axios from 'axios';
+import { THEME_CONSTANTS } from './index';
 
 function App() {
   const [riskLevel, setRiskLevel] = useState(null);
@@ -37,18 +38,20 @@ function App() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.6 }}
+      style={{ backgroundColor: THEME_CONSTANTS.colors.background, minHeight: '100vh' }}
     >
       <Container maxWidth="lg">
         <Header />
         
         <Box sx={{ my: 4 }}>
           <Paper 
-            elevation={4} 
+            elevation={0} 
             sx={{ 
-              p: 4, 
-              borderRadius: 3,
-              background: 'linear-gradient(145deg, #1e1e1e 0%, #2d2d2d 100%)',
-              boxShadow: '0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23)'
+              p: { xs: 2, sm: 4 }, 
+              borderRadius: THEME_CONSTANTS.radius.large,
+              background: THEME_CONSTANTS.colors.cardBackground,
+              border: `1px solid ${THEME_CONSTANTS.colors.border}`,
+              boxShadow: THEME_CONSTANTS.shadows.small
             }}
           >
             <Typography 
@@ -57,11 +60,9 @@ function App() {
               gutterBottom 
               sx={{ 
                 textAlign: 'center',
-                fontWeight: 500,
+                fontWeight: 600,
                 mb: 4,
-                background: 'linear-gradient(45deg, #3f51b5 10%, #f50057 90%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent'
+                color: THEME_CONSTANTS.colors.textPrimary
               }}
             >
               Algo Trading Analysis Tool
@@ -70,7 +71,7 @@ function App() {
             <Typography 
               variant="h6" 
               component="h2" 
-              sx={{ mb: 3, textAlign: 'center', color: '#ccc' }}
+              sx={{ mb: 3, textAlign: 'center', color: THEME_CONSTANTS.colors.textSecondary }}
             >
               Select your risk profile to get stock recommendations
             </Typography>
@@ -80,7 +81,14 @@ function App() {
             {loading && <Loading />}
             
             {error && (
-              <Box sx={{ mt: 4, p: 2, bgcolor: 'error.dark', borderRadius: 2, color: 'white' }}>
+              <Box sx={{ 
+                mt: 4, 
+                p: 3, 
+                bgcolor: 'rgba(245,101,101,0.1)', 
+                borderRadius: THEME_CONSTANTS.radius.medium, 
+                color: THEME_CONSTANTS.colors.error,
+                border: `1px solid ${THEME_CONSTANTS.colors.error}20`
+              }}>
                 <Typography variant="body1">{error}</Typography>
               </Box>
             )}
