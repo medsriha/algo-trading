@@ -42,13 +42,10 @@ class RiskLevelRequest(BaseModel):
 default_crossover_config = CrossoverConfig(
     upper_sma=50,
     lower_sma=20,
-    take_profit=0.10,
-    stop_loss=0.05,
-    crossover_length=10,
     rsi_period=14,
-    rsi_overbought=70,
-    rsi_oversold=30,
     rsi_underbought=50,
+    start_date="2025-01-01",
+
 )
 
 # Define default database config
