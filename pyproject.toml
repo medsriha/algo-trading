@@ -27,6 +27,7 @@ dependencies = [
     "beautifulsoup4>=4.13.3",
     "uvicorn",
     "fastapi",
+    "finnhub-python"
 ]
 
 # Development Dependencies
