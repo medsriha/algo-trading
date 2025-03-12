@@ -9,6 +9,7 @@ from algo_trading.data_providers import AlpacaDataProvider
 from algo_trading.models import CrossoverConfig
 import talib
 from pathlib import Path
+
 load_dotenv()
 
 # Configure logging
@@ -203,41 +204,47 @@ class CrossoverEntry:
             raise
 
     def get_historical_close(self, tickers: Union[str, List[str]]) -> pd.DataFrame:
-        """Get historical close prices for SMA calculation."""
+        """Get historical close prices from local CSV files."""
         try:
-            # Only fetch 55 days (50 for max SMA + 5 extra days for better indicator calculation)
-            end_date = datetime.now().strftime("%Y-%m-%d")
-            start_date = (datetime.now() - timedelta(days=self.crossover_config.upper_sma * 2)).strftime("%Y-%m-%d")
-
-            df = self.fetcher.get_stock_data(
-                symbols=tickers,
-                timeframe="1D",
-                start_date=start_date,
-                end_date=end_date,
-                columns=["symbol", "timestamp", "close"],  # Only request needed columns
-            )
-
-            return df[["symbol", "timestamp", "close"]]
+            all_data = []
+            
+            if isinstance(tickers, str):
+                tickers = [tickers]
+                
+            for ticker in tickers:
+                csv_path = self.DATA_DIR / ticker / "dataframe.csv"
+                if csv_path.exists():
+                    logger.info(f"Loading historical data for {ticker} from local CSV")
+                    df = pd.read_csv(csv_path)
+                    # Ensure we have the required columns
+                    if all(col in df.columns for col in ["symbol", "timestamp", "close"]):
+                        all_data.append(df[["symbol", "timestamp", "close"]])
+                    else:
+                        raise Exception(f"CSV for {ticker} missing required columns")
+                else:
+                    raise Exception(f"No local CSV found for {ticker}")
+            
+            return pd.concat(all_data, ignore_index=True)
 
         except Exception as e:
             logger.error(f"Failed to fetch historical data: {e}")
             raise
 
-    def get_market_data(self, tickers: Union[str, List[str]]) -> pd.DataFrame:
+    def get_market_data(self, ticker: str) -> pd.DataFrame:
         """Get both historical and current market data for given tickers."""
         try:
-            hist_df = self.get_historical_close(tickers)
+            hist_df = self.get_historical_close(ticker)
 
             if hist_df.empty:
                 raise Exception("Historical data is empty")
 
             hist_df["timestamp"] = pd.to_datetime(hist_df["timestamp"]).dt.date
 
-            current_df = self.get_todays_close(tickers)
+            current_df = self.get_todays_close(ticker)
 
             combined_df = pd.concat([hist_df, current_df], ignore_index=True)
             combined_df = self.prepare_data(combined_df)
-
+            
             combined_df = combined_df.sort_values(["symbol", "timestamp"])
             combined_df = combined_df.drop_duplicates(subset=["symbol", "timestamp"], keep="last")
 
@@ -249,7 +256,7 @@ class CrossoverEntry:
             logger.error(f"Failed to fetch market data: {e}")
             raise
 
-    def is_today_an_entry(self, frame: pd.DataFrame) -> dict[str, bool]:
+    def is_today_an_entry(self, tickers: Union[str, List[str]]) -> dict[str, bool]:
         """Return true if today meets entry criteria based on the crossover strategy.
 
         The entry criteria are:
@@ -260,15 +267,24 @@ class CrossoverEntry:
         5. Must not be in an overbought RSI condition
         """
         results = {}
-        for ticker, group in frame.groupby("symbol"):
-            if len(group) < 2:  # Need at least 2 days of data
+        for ticker in tickers:
+            frame = self.get_market_data(ticker)
+
+            if len(frame) < 2:  # Need at least 2 days of data
                 return False
-
-            group["entry"] = 0
+        
+            frame["entry"] = 0
+            
             # Get last two rows
-            yesterday = group.iloc[-2]
-            today = group.iloc[-1]
+            yesterday = frame.iloc[-2]
+            today = frame.iloc[-1]
+            
+            # Assert that today and yesterday are consecutive trading days
+            yesterday_date = yesterday["timestamp"]
+            today_date = today["timestamp"]
 
+            assert (today_date - yesterday_date).days == 1, f"Dates not consecutive: yesterday={yesterday_date}, today={today_date}"
+            
             # Check all conditions for entry
             conditions = {
                 "in_valid_crossunder": today["crossunder_point"],  # Must be in valid crossunder period
@@ -278,22 +294,18 @@ class CrossoverEntry:
                 "bearish_continuation": yesterday["SMA_lower_below_upper"]
                 and today["SMA_lower_below_upper"],  # Still in bearish period
             }
-
+            
             # Log conditions for debugging
             logger.debug(f"Entry conditions: {conditions}")
 
             is_entry = all(conditions.values())
             # Return True only if all conditions are met
             results[ticker] = is_entry
-            group.iloc[-2]["entry"] = 1 if is_entry else 0
+            
+            # Use loc to set values properly
+            frame.loc[frame.index[-2], "entry"] = 1 if is_entry else 0
+            
             os.makedirs(self.DATA_DIR / ticker / "today", exist_ok=True)
-
-            group.to_csv(self.DATA_DIR / ticker / "today" / "crossover.csv")
+            frame.to_csv(self.DATA_DIR / ticker / "today" / "crossover.csv")
 
         return results
-
-
-if __name__ == "__main__":
-    entry = CrossoverEntry()
-    frame = entry.get_market_data(["AAPL"])
-    print(entry.is_today_an_entry(frame))
