@@ -155,11 +155,11 @@ class AlpacaDataProvider:
             logger.debug(f"Converted single symbol to list: {symbols}")
 
         # Set default dates if not provided
-        if not start_date:
+        if start_date is None:
             start_date = (datetime.datetime.now() - datetime.timedelta(days=365)).strftime("%Y-%m-%d")
             logger.debug(f"Using default start_date: {start_date}")
 
-        if not end_date:
+        if end_date is None:
             end_date = datetime.datetime.now().strftime("%Y-%m-%d")
             logger.debug(f"Using default end_date: {end_date}")
 

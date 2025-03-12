@@ -2,39 +2,27 @@ import React, { useState, useEffect } from 'react';
 import { 
   Box, 
   Typography, 
-  Chip, 
-  Paper, 
+  Chip,
   Grid,
   Card,
   CardContent,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   Button,
   CircularProgress,
   Dialog,
   DialogTitle,
   DialogContent,
   IconButton,
-  DialogActions,
-  TextField,
   Tooltip,
-  Snackbar,
-  Alert,
   Divider
 } from '@mui/material';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import FormatQuoteIcon from '@mui/icons-material/FormatQuote';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
-import HideChartIcon from '@mui/icons-material/BarChart';
 import CloseIcon from '@mui/icons-material/Close';
-import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import NotificationsIcon from '@mui/icons-material/Notifications';
-import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { 
@@ -383,6 +371,11 @@ const StockChart = ({ ticker, isFullscreen = false }) => {
     );
   }
 
+  // Calculate the number of data points to show based on screen size
+  // Show more data points in fullscreen mode for better granularity
+  const dataPointsToShow = isFullscreen ? chartData.length : Math.min(30, chartData.length);
+  const displayData = chartData.slice(-dataPointsToShow);
+
   return (
     <Box sx={{ 
       width: '100%', 
@@ -410,7 +403,7 @@ const StockChart = ({ ticker, isFullscreen = false }) => {
       )}
       <ResponsiveContainer width="100%" height="100%">
         <LineChart 
-          data={chartData.slice(-30)} 
+          data={displayData} 
           margin={{ 
             top: isFullscreen ? 20 : 5, 
             right: isFullscreen ? 30 : 5, 
@@ -433,6 +426,8 @@ const StockChart = ({ ticker, isFullscreen = false }) => {
               offset: -10,
               style: { fontSize: '14px', fill: THEME.colors.textSecondary }
             } : undefined}
+            // Show more ticks in fullscreen mode
+            interval={isFullscreen ? 'preserveStartEnd' : 'equidistantPreserveStart'}
           />
           <YAxis 
             tick={{ fontSize: isFullscreen ? 14 : fontSize }}
@@ -442,6 +437,11 @@ const StockChart = ({ ticker, isFullscreen = false }) => {
               position: 'insideLeft',
               style: { fontSize: '14px', fill: THEME.colors.textSecondary }
             } : undefined}
+            // Add domain padding for better visualization
+            domain={['auto', 'auto']}
+            allowDecimals={true}
+            // Show more precision in fullscreen mode
+            tickCount={isFullscreen ? 10 : 5}
           />
           <RechartsTooltip 
             contentStyle={{ 
@@ -458,6 +458,8 @@ const StockChart = ({ ticker, isFullscreen = false }) => {
               const date = new Date(label);
               return date.toLocaleDateString();
             }}
+            // Show more detailed tooltip
+            itemSorter={(item) => -item.value}
           />
           <Legend 
             wrapperStyle={{ 
@@ -472,9 +474,16 @@ const StockChart = ({ ticker, isFullscreen = false }) => {
             dataKey="close" 
             stroke={THEME.colors.primary} 
             strokeWidth={isFullscreen ? 3 : 2}
-            dot={isFullscreen ? { r: 3 } : false}
+            // Show dots for better granularity
+            dot={isFullscreen ? { r: 2, strokeWidth: 1 } : { r: 1, strokeWidth: 1 }}
             activeDot={{ r: isFullscreen ? 8 : 6 }}
             name="Price"
+            // Connect null data points
+            connectNulls={true}
+            // Add animation for better UX
+            animationDuration={1000}
+            // Improve curve for better visualization
+            isAnimationActive={true}
           />
           <Line 
             type="monotone" 
@@ -483,6 +492,7 @@ const StockChart = ({ ticker, isFullscreen = false }) => {
             strokeWidth={isFullscreen ? 2 : 1.5}
             dot={false}
             name="SMA Lower"
+            strokeDasharray={isFullscreen ? "" : "5 5"}
           />
           <Line 
             type="monotone" 
@@ -491,6 +501,7 @@ const StockChart = ({ ticker, isFullscreen = false }) => {
             strokeWidth={isFullscreen ? 2 : 1.5}
             dot={false}
             name="SMA Upper"
+            strokeDasharray={isFullscreen ? "" : "5 5"}
           />
         </LineChart>
       </ResponsiveContainer>
