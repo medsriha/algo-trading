@@ -6,9 +6,11 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 
 from algo_trading.database import FindCandidateCrossover, DatabaseCrossoverConfig
+from algo_trading.database.news.alphavantage_news import AlphaVantageNewsExtractor
 from algo_trading.strategy import CrossoverEntry
 from algo_trading.models import CrossoverConfig
 from algo_trading.agents.configs import RiskProfile, State
+from algo_trading.agents import Journalist
 
 import yaml
 import json
@@ -101,6 +103,9 @@ def create_crossover_agent(
 ) -> Graph:
     """Creates an agent that processes risk appetite and extracts matching crossover"""
             
+    # Create journalist tool
+    journalist_tool = Journalist(news_extractor=AlphaVantageNewsExtractor(), llm=llm)
+            
     def process_risk_input(state: State) -> State:
         """Converts risk level to specific parameters"""
         logger.info(f"Processing risk level: {state['risk_level']}")
@@ -156,8 +161,7 @@ def create_crossover_agent(
             ticker_symbols = [ticker for ticker, _ in candidates]
             
             # Pass only the ticker symbols to get_market_data
-            market_data = entry.get_market_data(ticker_symbols)
-            results = entry.is_today_an_entry(market_data)
+            results = entry.is_today_an_entry(ticker_symbols)
 
             valid_entries = []
             not_valid_entries = []
@@ -191,6 +195,42 @@ def create_crossover_agent(
 
         return state
 
+    def get_ticker_news(state: State) -> State:
+        """Fetch and store recent news articles for tickers using the journalist tool"""
+        logger.info("Fetching recent news for tickers")
+        
+        # Collect all tickers we're interested in
+        all_tickers = []
+        if "tickers_to_invest" in state and state["tickers_to_invest"]:
+            all_tickers.extend(state["tickers_to_invest"])
+            
+        if not all_tickers:
+            logger.warning("No tickers to fetch news for")
+            state["ticker_news"] = {}
+            state["ticker_sentiment_analysis"] = {}
+            return state
+            
+        try:
+            # Use journalist tool to get news and sentiment analysis
+            news_data = journalist_tool.get_news_with_sentiment(all_tickers, days_back=5)
+            
+            # Add to state
+            state["ticker_news"] = news_data["ticker_news"]
+            state["ticker_sentiment_analysis"] = news_data["ticker_sentiment_analysis"]
+            print(state["ticker_sentiment_analysis"])
+            # Log summary
+            for ticker, articles in state["ticker_news"].items():
+                logger.info(f"Retrieved {len(articles)} recent news articles for {ticker}")
+                if ticker in state["ticker_sentiment_analysis"]:
+                    logger.info(f"Sentiment analysis for {ticker}: {state['ticker_sentiment_analysis'][ticker]['sentiment_trend']} (avg score: {state['ticker_sentiment_analysis'][ticker]['average_sentiment_score']})")
+                
+        except Exception as e:
+            logger.error(f"Error fetching news for tickers: {e}")
+            state["ticker_news"] = {}
+            state["ticker_sentiment_analysis"] = {}
+            
+        return state
+
     def analyst(state: State) -> State:
         if state["analyst_report"]:
             results = {}
@@ -199,7 +239,7 @@ def create_crossover_agent(
                 ticker, report = ticker_report_pair
 
                 context = f"Ticker: {ticker}\n\nReport: {report}"
-                
+   
                 template = ChatPromptTemplate.from_template(prompts["ANALYST_PROMPT"]["template"])
                 chain = template | llm
                 
@@ -221,13 +261,17 @@ def create_crossover_agent(
                 "analyst": results,
                 "not_entry_candidates": state["tickers_not_invest"],
                 "entry_candidates": state["tickers_to_invest"],
+                "ticker_news": state["ticker_news"],
+                "ticker_sentiment_analysis": state["ticker_sentiment_analysis"]
             }
         
         return {"analyst": "No information found"}
+    
     # Create and connect the graph
     graph = Graph()
     graph.add_node("process_risk", process_risk_input)
     graph.add_node("find_crossover_tickers", find_crossover_tickers)
+    graph.add_node("get_ticker_news", get_ticker_news)
     graph.add_node("get_ticker_latest_analyst_report", get_ticker_latest_analyst_report)
     graph.add_node("analyst", analyst)
     graph.add_node("is_entry", is_entry)
@@ -237,7 +281,8 @@ def create_crossover_agent(
     graph.add_edge(START, "process_risk")
     graph.add_edge("process_risk", "find_crossover_tickers")
     graph.add_edge("find_crossover_tickers", "is_entry")
-    graph.add_edge("is_entry", "get_ticker_latest_analyst_report")
+    graph.add_edge("is_entry", "get_ticker_news")
+    graph.add_edge("get_ticker_news", "get_ticker_latest_analyst_report")
     graph.add_edge("get_ticker_latest_analyst_report", "analyst")
     graph.add_edge("analyst", END)
 
@@ -260,3 +305,55 @@ def get_ticker_recommendations(
     """
     graph = create_crossover_agent(db_config, llm, crossover_config)
     return graph.compile()
+
+
+def run_sample_crossover_agent():
+    """
+    Run a sample crossover agent with predefined configuration.
+    This function demonstrates how to use the crossover agent with sample inputs.
+    
+    Returns:
+        The results from running the crossover agent
+    """
+    from langchain_openai import ChatOpenAI
+    from algo_trading.database import DatabaseCrossoverConfig
+    from algo_trading.models import CrossoverConfig
+    
+    # Create sample configurations
+    db_config = DatabaseCrossoverConfig()
+    
+    crossover_config = CrossoverConfig()
+    
+    # Initialize LLM
+    llm = ChatOpenAI(temperature=0.1, model="gpt-4")
+    
+    # Create the agent graph
+    graph = create_crossover_agent(db_config, llm, crossover_config)
+    
+    # Compile the graph
+    compiled_graph = graph.compile()
+    
+    # Run the graph with a sample risk level
+    result = compiled_graph.invoke({"risk_level": "moderate"})
+    
+    # Log the results
+    logger.info("Sample crossover agent run completed")
+    logger.info(f"Entry candidates: {result.get('entry_candidates', [])}")
+    
+    # Return the results for further inspection
+    return result
+
+
+if __name__ == "__main__":
+    # Run the sample when the script is executed directly
+    sample_result = run_sample_crossover_agent()
+    print("Sample run completed. Results:")
+    print(f"Entry candidates: {sample_result.get('entry_candidates', [])}")
+    
+    if 'analyst' in sample_result and isinstance(sample_result['analyst'], dict):
+        print("\nAnalyst reports:")
+        for ticker, report in sample_result['analyst'].items():
+            print(f"\n{ticker} Analysis:")
+            print("-" * 40)
+            print(report[:300] + "..." if len(report) > 300 else report)
+            print("-" * 40)
