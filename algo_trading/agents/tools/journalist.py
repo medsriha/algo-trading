@@ -256,3 +256,137 @@ class Journalist:
             summary += f"(score: {sentiment.get('average_sentiment_score', 0):.2f})\n"
             
         return summary
+        
+    def get_all_ticker_articles_with_sentiment(self, tickers: List[str], days_back: int = 5) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Get all articles with their sentiment data for each ticker over the specified period.
+        
+        Args:
+            tickers: List of ticker symbols to fetch news for
+            days_back: Number of days to look back for news (default: 5)
+            
+        Returns:
+            Dictionary mapping each ticker to a list of articles with sentiment data
+        """
+        logger.info(f"Fetching all articles with sentiment for {len(tickers)} tickers, looking back {days_back} days")
+        
+        result = {}
+        
+        try:
+            # Get recent news for all tickers
+            ticker_news = self.news_extractor.get_recent_articles_for_tickers(tickers, days_back=days_back)
+            
+            # Process each ticker's articles
+            for ticker, articles in ticker_news.items():
+                ticker_articles = []
+                
+                for article in articles:
+                    # Extract basic article info
+                    article_data = {
+                        "title": article.get("title", "No title"),
+                        "time_published": article.get("time_published", "Unknown date"),
+                        "source": article.get("source", "Unknown source"),
+                        "url": article.get("url", ""),
+                        "summary": article.get("summary", ""),
+                    }
+                    
+                    # Extract sentiment specific to this ticker
+                    ticker_specific_sentiment = None
+                    if 'ticker_sentiment' in article:
+                        for sentiment in article['ticker_sentiment']:
+                            if sentiment['ticker'] == ticker:
+                                ticker_specific_sentiment = sentiment
+                                break
+                    
+                    # Add sentiment data
+                    if ticker_specific_sentiment:
+                        article_data["sentiment"] = {
+                            "score": ticker_specific_sentiment.get("ticker_sentiment_score", 0),
+                            "label": ticker_specific_sentiment.get("ticker_sentiment_label", "Neutral"),
+                            "relevance_score": ticker_specific_sentiment.get("relevance_score", 0)
+                        }
+                    elif 'overall_sentiment_score' in article:
+                        article_data["sentiment"] = {
+                            "score": article.get("overall_sentiment_score", 0),
+                            "label": article.get("overall_sentiment_label", "Neutral"),
+                            "relevance_score": 0.1  # Lower relevance for overall sentiment
+                        }
+                    else:
+                        article_data["sentiment"] = {
+                            "score": 0,
+                            "label": "Unknown",
+                            "relevance_score": 0
+                        }
+                    
+                    ticker_articles.append(article_data)
+                
+                # Sort articles by publication date (most recent first)
+                ticker_articles.sort(
+                    key=lambda x: x.get("time_published", ""), 
+                    reverse=True
+                )
+                
+                # Calculate average sentiment per day
+                daily_sentiment = {}
+                
+                for article in ticker_articles:
+                    # Extract date from time_published (format might vary)
+                    time_str = article.get("time_published", "")
+                    date_str = time_str.split("T")[0] if "T" in time_str else time_str.split(" ")[0]
+                    
+                    # Skip if no valid date
+                    if not date_str:
+                        continue
+                        
+                    # Initialize day entry if not exists
+                    if date_str not in daily_sentiment:
+                        daily_sentiment[date_str] = {
+                            "scores": [],
+                            "articles": []
+                        }
+                    
+                    # Add sentiment score and article reference
+                    sentiment_score = float(article["sentiment"]["score"])
+                    daily_sentiment[date_str]["scores"].append(sentiment_score)
+                    daily_sentiment[date_str]["articles"].append(article)
+                
+                # Calculate average and categorize sentiment for each day
+                daily_sentiment_summary = {}
+                
+                for date, data in daily_sentiment.items():
+                    if not data["scores"]:
+                        continue
+                        
+                    avg_score = sum(data["scores"]) / len(data["scores"])
+                    
+                    # Categorize sentiment based on score
+                    if avg_score <= -0.35:
+                        sentiment_category = "Bearish"
+                    elif -0.35 < avg_score <= -0.15:
+                        sentiment_category = "Somewhat-Bearish"
+                    elif -0.15 < avg_score < 0.15:
+                        sentiment_category = "Neutral"
+                    elif 0.15 <= avg_score < 0.35:
+                        sentiment_category = "Somewhat-Bullish"
+                    else:  # avg_score >= 0.35
+                        sentiment_category = "Bullish"
+                    
+                    daily_sentiment_summary[date] = {
+                        "average_score": avg_score,
+                        "sentiment_category": sentiment_category,
+                        "article_count": len(data["articles"]),
+                        "articles": data["articles"]
+                    }
+                
+                # Add daily sentiment summary to the ticker's data
+                ticker_articles_with_daily = {
+                    "articles": ticker_articles,
+                    "daily_sentiment": daily_sentiment_summary
+                }
+                
+                result[ticker] = ticker_articles_with_daily
+                
+        except Exception as e:
+            logger.error(f"Error fetching articles with sentiment: {e}")
+            
+        return result
