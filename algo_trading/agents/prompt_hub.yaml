@@ -47,3 +47,13 @@ RISK_PROFILE_PROMPT:
     }}
 
     Response (JSON only):
+
+JOURNALIST_PROMPT:
+  template: |
+    You are a financial journalist summarizing recent news for investors.
+
+    Please provide a concise, insightful summary of the following news for {ticker}. 
+    Focus on potential market impact and key developments. 
+    Keep your summary under 200 words.
+
+    {news_context}
