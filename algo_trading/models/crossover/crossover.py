@@ -19,7 +19,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 
 class Crossover:
     # Class constants
-    DATA_DIR = Path("data")
     PATTERN_TYPES = ("gain", "loss")
 
     def __init__(
@@ -30,7 +29,7 @@ class Crossover:
 
         self.tickers = tickers
         self.crossover_config = crossover_config
-        self.output_path = self.DATA_DIR
+        self.output_path = self.crossover_config.DATA_DIR
         self.database_config = database_config
         logger.info(f"Initializing database for {database_config.table_name}")
         logger.info(f"Checking if database exists: {check_database_exists(database_config.table_name)}")

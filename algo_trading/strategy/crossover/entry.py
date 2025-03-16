@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class CrossoverEntry:
     """Class to manage market data operations and calculations."""
 
-    DATA_DIR = Path("data")
+    DATA_DIR = Path("/Users/deepset/algo-trading/warehouse/file_system")
 
     def __init__(
         self,
@@ -213,6 +213,7 @@ class CrossoverEntry:
                 
             for ticker in tickers:
                 csv_path = self.DATA_DIR / ticker / "dataframe.csv"
+
                 if csv_path.exists():
                     logger.info(f"Loading historical data for {ticker} from local CSV")
                     df = pd.read_csv(csv_path)
@@ -227,7 +228,7 @@ class CrossoverEntry:
             return pd.concat(all_data, ignore_index=True)
 
         except Exception as e:
-            logger.error(f"Failed to fetch historical data: {e}")
+            logger.error(f"Failed to fetch historical data: {e}", exc_info=True)
             raise
 
     def get_market_data(self, ticker: str) -> pd.DataFrame:

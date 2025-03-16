@@ -35,14 +35,15 @@ class FindCandidateCrossover:
     
         )
 
-    def retrieve_candidates(self) -> list[str]:
+    def retrieve_candidates(self) -> list[tuple[str, float]]:
         """Retrieve candidate stocks from the database.
 
         Returns:
-            list[str]: List of ticker symbols meeting the filter criteria
+            list[tuple[str, float]]: List of tuples containing ticker symbols and their combined return
         """
         self.logger.debug(f"Connecting to database at {self.config.db_path}")
         # Connect to SQLite database
+
         conn = sqlite3.connect(self.config.db_path)
         cursor = conn.cursor()
 
@@ -60,7 +61,7 @@ class FindCandidateCrossover:
                 AND c.total_trades >= ?
             ORDER BY c.combined_return DESC
         """
-
+        
         try:
             self.logger.debug("Executing SQL query to retrieve candidates with latest data")
             cursor.execute(
@@ -80,7 +81,7 @@ class FindCandidateCrossover:
             return candidates
 
         except sqlite3.Error as e:
-            self.logger.error(f"Database error: {e}")
+            self.logger.error(f"Database error: {e}", exc_info=True)
             return []
 
         finally:

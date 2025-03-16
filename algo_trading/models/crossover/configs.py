@@ -1,11 +1,13 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 
 
 @dataclass
 class CrossoverConfig:
     """Configuration for crossover analysis."""
 
+    DATA_DIR: Path = Path("/Users/deepset/algo_trading/warhouse/file_system")
     lower_sma: int = 20
     upper_sma: int = 50
     take_profit: float = 0.10

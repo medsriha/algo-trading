@@ -9,11 +9,14 @@ class DatabaseCrossoverConfig:
 
     db_name: str = "crossover.db"
     table_name: str = "crossover"
-    db_dir: Path = Path(".")
+    db_dir: Path = Path("/Users/deepset/algo-trading/warehouse")
     columns: Dict[str, Dict[str, Any]] = None
 
     def __post_init__(self):
         """Set default columns if none provided."""
+        if isinstance(self.db_dir, str):
+            self.db_dir = Path(self.db_dir)
+            
         if self.columns is None:
             self.columns = {
                 "data_creation_date": {"type": "DATE", "constraints": "NOT NULL"},
