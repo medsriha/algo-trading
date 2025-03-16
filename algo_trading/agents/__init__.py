@@ -1,3 +1,3 @@
-from algo_trading.agents.tools.journalist import Journalist
+from algo_trading.agents.tools.stock_journalist import StockJournalist
 
-__all__ = ["Journalist"]
+__all__ = ["StockJournalist"]

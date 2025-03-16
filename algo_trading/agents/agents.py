@@ -10,7 +10,7 @@ from algo_trading.database.news.alphavantage_news import AlphaVantageNewsExtract
 from algo_trading.strategy import CrossoverEntry
 from algo_trading.models import CrossoverConfig
 from algo_trading.agents.configs import RiskProfile, State
-from algo_trading.agents import Journalist
+from algo_trading.agents import StockJournalist
 
 import yaml
 import json
@@ -19,6 +19,7 @@ import re
 from dotenv import load_dotenv
 import logging
 from concurrent.futures import ThreadPoolExecutor
+import sqlite3
 
 load_dotenv()
 
@@ -28,7 +29,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(),  # Output to console
-        logging.FileHandler("crossover_agent.log"),  # Output to file
+        logging.FileHandler("/Users/deepset/algo-trading/logs/crossover_agent.log"),  # Output to file
     ],
 )
 
@@ -96,15 +97,13 @@ def get_risk_profile(risk_level: Literal["conservative", "moderate", "aggressive
         else:
             raise ValueError(f"Invalid risk level: {risk_level}")
             
-
-
 def create_crossover_agent(
     db_config: DatabaseCrossoverConfig, llm: ChatOpenAI, crossover_config: CrossoverConfig
 ) -> Graph:
     """Creates an agent that processes risk appetite and extracts matching crossover"""
             
     # Create journalist tool
-    journalist_tool = Journalist(news_extractor=AlphaVantageNewsExtractor(), llm=llm)
+    journalist_tool = StockJournalist(news_extractor=AlphaVantageNewsExtractor(), llm=llm)
             
     def process_risk_input(state: State) -> State:
         """Converts risk level to specific parameters"""
@@ -140,15 +139,81 @@ def create_crossover_agent(
 
         for ticker in state["tickers_to_invest"]:
 
-            with open(f"data/{ticker}/report.txt", "r") as f:
+            with open(f"/Users/deepset/algo-trading/warehouse/file_system/{ticker}/report.txt", "r") as f:
                 report = f.read()
                 reports[ticker] = report
 
         state["analyst_report"] = reports
         return state
 
+    def fetch_company_overviews(state: State) -> State:
+        """
+        Fetch and store company overview data for tickers to invest in.
+        
+        This function retrieves company overview information from the database
+        for all tickers marked for investment and adds it to the state.
+        """
+        logger.info("Fetching company overviews for tickers to invest")
+        
+        try:
+            from algo_trading.database.companies.companies_overview import CompanyOverviewExtractor
+            from algo_trading.database.companies.configs import CompanyOverviewDbConfig
+            
+            if "tickers_to_invest" not in state or not state["tickers_to_invest"]:
+                logger.warning("No tickers to fetch company overviews for")
+                state["company_overviews"] = {}
+                return state
+            
+            # Initialize the company overview extractor
+            config = CompanyOverviewDbConfig()
+            extractor = CompanyOverviewExtractor(config)
+            
+            # Fetch company overviews for each ticker
+            overviews = {}
+            
+            for ticker in state["tickers_to_invest"]:
+                logger.info(f"Fetching company overview for {ticker}")
+                
+                # Connect to the database
+                conn = sqlite3.connect(config.db_path)
+                cursor = conn.cursor()
+                
+                # Query the database for the ticker's overview
+                cursor.execute(f'SELECT * FROM {config.table_name} WHERE Symbol = ?', (ticker,))
+                columns = [description[0] for description in cursor.description]
+                row = cursor.fetchone()
+                
+                if row:
+                    # Convert row to dictionary
+                    overview = {columns[i]: row[i] for i in range(len(columns))}
+                    overviews[ticker] = overview
+                    logger.info(f"Found company overview for {ticker}")
+                else:
+                    logger.warning(f"No company overview found for {ticker}")
+                    # Try to fetch from API if not in database
+                    data = extractor.fetch_company_overview(ticker)
+                    if data:
+                        extractor.store_company_overview(data)
+                        overviews[ticker] = data
+                        logger.info(f"Fetched and stored company overview for {ticker} from API")
+                    else:
+                        logger.error(f"Failed to fetch company overview for {ticker}")
+                        overviews[ticker] = None
+                
+                conn.close()
+            
+            # Add to state
+            state["company_overviews"] = overviews
+            
+        except Exception as e:
+            logger.error(f"Error fetching company overviews: {e}")
+            state["company_overviews"] = {}
+        
+        return state
+
     def is_entry(state: State) -> State:
         """Checks if the tickers are a valid entry point and returns the tickers that are valid"""
+
         candidates = state["tickers"]
         entry = CrossoverEntry(crossover_config=crossover_config)
 
@@ -195,40 +260,32 @@ def create_crossover_agent(
 
         return state
 
-    def get_ticker_news(state: State) -> State:
+    def journalist(state: State) -> State:
         """Fetch and store recent news articles for tickers using the journalist tool"""
         logger.info("Fetching recent news for tickers")
-        
-        # Collect all tickers we're interested in
-        all_tickers = []
-        if "tickers_to_invest" in state and state["tickers_to_invest"]:
-            all_tickers.extend(state["tickers_to_invest"])
-            
-        if not all_tickers:
-            logger.warning("No tickers to fetch news for")
-            state["ticker_news"] = {}
-            state["ticker_sentiment_analysis"] = {}
-            return state
-            
         try:
-            # Use journalist tool to get news and sentiment analysis
-            news_data = journalist_tool.get_news_with_sentiment(all_tickers, days_back=5)
-            
-            # Add to state
-            state["ticker_news"] = news_data["ticker_news"]
-            state["ticker_sentiment_analysis"] = news_data["ticker_sentiment_analysis"]
-            print(state["ticker_sentiment_analysis"])
-            # Log summary
-            for ticker, articles in state["ticker_news"].items():
-                logger.info(f"Retrieved {len(articles)} recent news articles for {ticker}")
-                if ticker in state["ticker_sentiment_analysis"]:
-                    logger.info(f"Sentiment analysis for {ticker}: {state['ticker_sentiment_analysis'][ticker]['sentiment_trend']} (avg score: {state['ticker_sentiment_analysis'][ticker]['average_sentiment_score']})")
+            # Collect all tickers we're interested in
+            if "tickers_to_invest" not in state or not state["tickers_to_invest"]:
+                logger.warning("No tickers to fetch news for")
+                state["daily_news"] = {}
+                state["ticker_news_summaries"] = {}
+                return state
                 
+            # try:
+            # Use journalist tool to get news and sentiment analysis
+            news_data = journalist_tool.get_news_with_sentiment(state["tickers_to_invest"], days_back=5)
+            
+            daily_news = journalist_tool.group_articles_by_date(news_data["ticker_news"])
+            # Add to state
+            state["daily_news"] = daily_news
+            
+            daily_sentiment = journalist_tool.calculate_average_sentiment(state["tickers_to_invest"], days_back=5)
+
+            state["daily_sentiment"] = daily_sentiment
         except Exception as e:
             logger.error(f"Error fetching news for tickers: {e}")
-            state["ticker_news"] = {}
-            state["ticker_sentiment_analysis"] = {}
-            
+            state["daily_news"] = {}
+            state["daily_sentiment"] = {}
         return state
 
     def analyst(state: State) -> State:
@@ -251,18 +308,14 @@ def create_crossover_agent(
                     }
                 )
                 return ticker, result.content.strip()
-            
-            # Use ThreadPoolExecutor to process all tickers in parallel
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                for ticker, content in executor.map(process_ticker, state["analyst_report"].items()):
-                    results[ticker] = content
 
             return {
                 "analyst": results,
-                "not_entry_candidates": state["tickers_not_invest"],
-                "entry_candidates": state["tickers_to_invest"],
-                "ticker_news": state["ticker_news"],
-                "ticker_sentiment_analysis": state["ticker_sentiment_analysis"]
+                "not_entry_candidates": state.get("tickers_not_invest", []),
+                "entry_candidates": state.get("tickers_to_invest", []),
+                "daily_news": state.get("daily_news", {}),
+                "daily_sentiment": state.get("daily_sentiment", {}),
+                "company_overviews": state.get("company_overviews", {})
             }
         
         return {"analyst": "No information found"}
@@ -271,19 +324,20 @@ def create_crossover_agent(
     graph = Graph()
     graph.add_node("process_risk", process_risk_input)
     graph.add_node("find_crossover_tickers", find_crossover_tickers)
-    graph.add_node("get_ticker_news", get_ticker_news)
+    graph.add_node("journalist", journalist)
     graph.add_node("get_ticker_latest_analyst_report", get_ticker_latest_analyst_report)
+    graph.add_node("fetch_company_overviews", fetch_company_overviews)
     graph.add_node("analyst", analyst)
     graph.add_node("is_entry", is_entry)
-
-
+    
     # Define the main flow
     graph.add_edge(START, "process_risk")
     graph.add_edge("process_risk", "find_crossover_tickers")
     graph.add_edge("find_crossover_tickers", "is_entry")
-    graph.add_edge("is_entry", "get_ticker_news")
-    graph.add_edge("get_ticker_news", "get_ticker_latest_analyst_report")
-    graph.add_edge("get_ticker_latest_analyst_report", "analyst")
+    graph.add_edge("is_entry", "journalist")
+    graph.add_edge("journalist", "get_ticker_latest_analyst_report")
+    graph.add_edge("get_ticker_latest_analyst_report", "fetch_company_overviews")
+    graph.add_edge("fetch_company_overviews", "analyst")
     graph.add_edge("analyst", END)
 
     return graph
@@ -307,53 +361,38 @@ def get_ticker_recommendations(
     return graph.compile()
 
 
-def run_sample_crossover_agent():
-    """
-    Run a sample crossover agent with predefined configuration.
-    This function demonstrates how to use the crossover agent with sample inputs.
+# def run_sample_crossover_agent():
+#     """
+#     Run a sample crossover agent with predefined configuration.
+#     This function demonstrates how to use the crossover agent with sample inputs.
     
-    Returns:
-        The results from running the crossover agent
-    """
-    from langchain_openai import ChatOpenAI
-    from algo_trading.database import DatabaseCrossoverConfig
-    from algo_trading.models import CrossoverConfig
+#     Returns:
+#         The results from running the crossover agent
+#     """
+#     from langchain_openai import ChatOpenAI
+#     from algo_trading.database import DatabaseCrossoverConfig
+#     from algo_trading.models import CrossoverConfig
     
-    # Create sample configurations
-    db_config = DatabaseCrossoverConfig()
+#     # Create sample configurations
+#     db_config = DatabaseCrossoverConfig()
     
-    crossover_config = CrossoverConfig()
+#     crossover_config = CrossoverConfig()
     
-    # Initialize LLM
-    llm = ChatOpenAI(temperature=0.1, model="gpt-4")
+#     # Initialize LLM
+#     llm = ChatOpenAI(temperature=0.1, model="gpt-4")
     
-    # Create the agent graph
-    graph = create_crossover_agent(db_config, llm, crossover_config)
+#     # Create the agent graph
+#     graph = create_crossover_agent(db_config, llm, crossover_config)
     
-    # Compile the graph
-    compiled_graph = graph.compile()
+#     # Compile the graph
+#     compiled_graph = graph.compile()
     
-    # Run the graph with a sample risk level
-    result = compiled_graph.invoke({"risk_level": "moderate"})
+#     # Run the graph with a sample risk level
+#     result = compiled_graph.invoke({"risk_level": "moderate"})
     
-    # Log the results
-    logger.info("Sample crossover agent run completed")
-    logger.info(f"Entry candidates: {result.get('entry_candidates', [])}")
+#     # Log the results
+#     logger.info("Sample crossover agent run completed")
+#     logger.info(f"Entry candidates: {result.get('entry_candidates', [])}")
     
-    # Return the results for further inspection
-    return result
-
-
-if __name__ == "__main__":
-    # Run the sample when the script is executed directly
-    sample_result = run_sample_crossover_agent()
-    print("Sample run completed. Results:")
-    print(f"Entry candidates: {sample_result.get('entry_candidates', [])}")
-    
-    if 'analyst' in sample_result and isinstance(sample_result['analyst'], dict):
-        print("\nAnalyst reports:")
-        for ticker, report in sample_result['analyst'].items():
-            print(f"\n{ticker} Analysis:")
-            print("-" * 40)
-            print(report[:300] + "..." if len(report) > 300 else report)
-            print("-" * 40)
+#     # Return the results for further inspection
+#     return result
