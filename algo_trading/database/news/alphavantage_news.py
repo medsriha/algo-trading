@@ -84,7 +84,7 @@ class AlphaVantageNewsExtractor:
                 # Index for the main table
                 cursor.execute(f"""
                     CREATE INDEX IF NOT EXISTS idx_article_time 
-                    ON {self.db_config.table_name} (time_published)
+                    ON {self.db_config.articles_table_name} (time_published)
                 """)
                 
                 # Index for the topics table
@@ -144,24 +144,16 @@ class AlphaVantageNewsExtractor:
     def get_news_sentiment(
         self, 
         tickers: Union[str, List[str]] = None, 
-        topics: Union[str, List[str]] = None,
         time_from: Union[str, datetime] = None,
-        time_to: Union[str, datetime] = None,
         sort: str = SORT_LATEST,
-        limit: int = 50
     ) -> Dict:
         """Get news and sentiment based on specified parameters.
         
-        Args:
-            tickers: Stock/crypto/forex symbols (comma-separated string or list)
-            topics: News topics (comma-separated string or list)
-            time_from: Start time in YYYYMMDDTHHMM format or datetime object
-            time_to: End time in YYYYMMDDTHHMM format or datetime object
-            sort: Sort order (LATEST, EARLIEST, or RELEVANCE)
-            limit: Maximum number of results (up to 1000)
-            
-        Returns:
-            Dictionary containing news feed and metadata
+        : param tickers: Stock/crypto/forex symbols (comma-separated string or list)
+        : param topics: News topics (comma-separated string or list)
+        : param time_from: Start time in YYYYMMDDTHHMM format or datetime object
+        : param sort: Sort order (LATEST, EARLIEST, or RELEVANCE)
+        : param limit: Maximum number of results (up to 1000)
         """
         # Validate and prepare parameters
         params = {
@@ -175,16 +167,6 @@ class AlphaVantageNewsExtractor:
                 tickers = ','.join(tickers)
             params['tickers'] = tickers
             
-        # Handle topics parameter
-        if topics:
-            if isinstance(topics, list):
-                # Validate topics
-                valid_topics = [t for t in topics if t in self.TOPICS.values()]
-                if len(valid_topics) != len(topics):
-                    invalid = set(topics) - set(valid_topics)
-                    logger.warning(f"Ignoring invalid topics: {invalid}")
-                topics = ','.join(valid_topics)
-            params['topics'] = topics
             
         # Handle time parameters
         if time_from:
@@ -192,36 +174,23 @@ class AlphaVantageNewsExtractor:
                 time_from = self.format_datetime(time_from)
             params['time_from'] = time_from
             
-        if time_to:
-            if isinstance(time_to, datetime):
-                time_to = self.format_datetime(time_to)
-            params['time_to'] = time_to
             
         # Handle sort parameter
         if sort not in [self.SORT_LATEST, self.SORT_EARLIEST, self.SORT_RELEVANCE]:
             logger.warning(f"Invalid sort parameter: {sort}. Using default: {self.SORT_LATEST}")
             sort = self.SORT_LATEST
         params['sort'] = sort
-        
-        # Handle limit parameter
-        if limit > 1000:
-            logger.warning(f"Limit exceeds maximum (1000). Setting to 1000.")
-            limit = 1000
-        params['limit'] = limit
+
         
         # Log query parameters
         query_desc = []
         if 'tickers' in params:
             query_desc.append(f"tickers={params['tickers']}")
-        if 'topics' in params:
-            query_desc.append(f"topics={params['topics']}")
         if 'time_from' in params:
             query_desc.append(f"from {params['time_from']}")
-        if 'time_to' in params:
-            query_desc.append(f"to {params['time_to']}")
             
         logger.info(f"Fetching news for {', '.join(query_desc)}")
-        
+
         try:
             response = requests.get(self.base_url, params=params)
             response.raise_for_status()
@@ -263,7 +232,7 @@ class AlphaVantageNewsExtractor:
         
         # Check if the article exists in the main table
         cursor.execute(
-            f"SELECT 1 FROM {self.db_config.table_name} WHERE url = ?", 
+            f"SELECT 1 FROM {self.db_config.articles_table_name} WHERE url = ?", 
             (url,)
         )
         if cursor.fetchone():
@@ -271,11 +240,12 @@ class AlphaVantageNewsExtractor:
                 
         return False
     
-    def save_news_to_db(self, news_data: Dict, batch_size: int = 10):
+    def save_news_to_db(self, news_data: Dict, target_tickers: Union[str, List[str]], batch_size: int = 10):
         """Save news articles to database in batches with normalized topic and ticker data.
         
         Args:
             news_data: Dictionary containing news feed and metadata
+            target_tickers: Ticker or list of tickers to store sentiment data for
             batch_size: Number of articles to process in each batch
             
         Returns:
@@ -284,6 +254,11 @@ class AlphaVantageNewsExtractor:
         if not news_data or 'feed' not in news_data or not news_data['feed']:
             logger.warning("No news articles to save")
             return 0
+        
+        # Normalize target_tickers to a list
+        if isinstance(target_tickers, str):
+            target_tickers = [target_tickers]
+        target_tickers = [t.upper() for t in target_tickers]
         
         news_articles = news_data['feed']
         total_inserted = 0
@@ -344,7 +319,7 @@ class AlphaVantageNewsExtractor:
                         
                         # Insert the article
                         insert_query = f"""
-                            INSERT OR IGNORE INTO {self.db_config.table_name} 
+                            INSERT OR IGNORE INTO {self.db_config.articles_table_name} 
                             ({columns}) VALUES ({placeholders})
                         """
                         
@@ -372,25 +347,26 @@ class AlphaVantageNewsExtractor:
                                         ({topic_columns}) VALUES ({topic_placeholders})
                                     """, topic_values)
                             
-                            # 3. Insert ticker sentiment data
+                            # 3. Insert ticker sentiment data - modified to only store target tickers
                             if 'ticker_sentiment' in article and article['ticker_sentiment']:
                                 for ticker_data in article['ticker_sentiment']:
-                                    ticker_insert = {
-                                        'url': article.get('url'),
-                                        'ticker': ticker_data.get('ticker'),
-                                        'relevance_score': float(ticker_data.get('relevance_score', 0)),
-                                        'ticker_sentiment_score': float(ticker_data.get('ticker_sentiment_score', 0)),
-                                        'ticker_sentiment_label': ticker_data.get('ticker_sentiment_label')
-                                    }
-                                    
-                                    ticker_columns = ', '.join(ticker_insert.keys())
-                                    ticker_placeholders = ', '.join(['?'] * len(ticker_insert))
-                                    ticker_values = list(ticker_insert.values())
-                                    
-                                    cursor.execute(f"""
-                                        INSERT INTO {self.db_config.ticker_sentiment_table_name} 
-                                        ({ticker_columns}) VALUES ({ticker_placeholders})
-                                    """, ticker_values)
+                                    if ticker_data.get('ticker', '').upper() in target_tickers:
+                                        ticker_insert = {
+                                            'url': article.get('url'),
+                                            'ticker': ticker_data.get('ticker'),
+                                            'relevance_score': float(ticker_data.get('relevance_score', 0)),
+                                            'ticker_sentiment_score': float(ticker_data.get('ticker_sentiment_score', 0)),
+                                            'ticker_sentiment_label': ticker_data.get('ticker_sentiment_label')
+                                        }
+                                        
+                                        ticker_columns = ', '.join(ticker_insert.keys())
+                                        ticker_placeholders = ', '.join(['?'] * len(ticker_insert))
+                                        ticker_values = list(ticker_insert.values())
+                                        
+                                        cursor.execute(f"""
+                                            INSERT INTO {self.db_config.ticker_sentiment_table_name} 
+                                            ({ticker_columns}) VALUES ({ticker_placeholders})
+                                        """, ticker_values)
                         
                     except sqlite3.Error as e:
                         logger.error(f"Error inserting article {article.get('url')}: {e}")
@@ -402,7 +378,7 @@ class AlphaVantageNewsExtractor:
         logger.info(f"Total: Saved {total_inserted} news articles to database")
         return total_inserted
     
-    def extract_and_save_news_for_ticker(self, ticker: str, days_back: int = 20, batch_size: int = 10, limit: int = 50):
+    def extract_and_save_news_for_ticker(self, ticker: str, from_date: str, batch_size: int = 10):
         """Extract news for a specific ticker and save to database.
         
         Args:
@@ -414,15 +390,12 @@ class AlphaVantageNewsExtractor:
         Returns:
             Dictionary containing news feed and metadata
         """
-        time_from = datetime.now() - timedelta(days=days_back)
         
         news_data = self.get_news_sentiment(
             tickers=ticker,
-            time_from=time_from,
-            limit=limit
+            time_from=from_date
         )
-        
-        self.save_news_to_db(news_data, batch_size=batch_size)
+        self.save_news_to_db(news_data, target_tickers=ticker, batch_size=batch_size)
         return news_data
     
     def extract_and_save_news_for_topic(self, topic: str, days_back: int = 20, batch_size: int = 10, limit: int = 50):
@@ -445,11 +418,10 @@ class AlphaVantageNewsExtractor:
         
         news_data = self.get_news_sentiment(
             topics=topic,
-            time_from=time_from,
-            limit=limit
+            time_from=time_from
         )
         
-        self.save_news_to_db(news_data, batch_size=batch_size)
+        self.save_news_to_db(news_data, target_tickers=topic, batch_size=batch_size)
         return news_data
     
     def extract_and_save_news_for_multiple_tickers(self, tickers: List[str], days_back: int = 20, batch_size: int = 10, limit: int = 50):
@@ -468,60 +440,16 @@ class AlphaVantageNewsExtractor:
         
         news_data = self.get_news_sentiment(
             tickers=tickers,
-            time_from=time_from,
-            limit=limit
+            time_from=time_from
         )
         
-        self.save_news_to_db(news_data, batch_size=batch_size)
+        self.save_news_to_db(news_data, target_tickers=tickers, batch_size=batch_size)
         return news_data
     
-    def extract_and_save_news_with_custom_query(
-        self, 
-        tickers: Union[str, List[str]] = None, 
-        topics: Union[str, List[str]] = None,
-        time_from: Union[str, datetime] = None,
-        time_to: Union[str, datetime] = None,
-        sort: str = SORT_LATEST,
-        limit: int = 50,
-        batch_size: int = 10
-    ):
-        """Extract news with custom query parameters and save to database.
-        
-        Args:
-            tickers: Stock/crypto/forex symbols (comma-separated string or list)
-            topics: News topics (comma-separated string or list)
-            time_from: Start time in YYYYMMDDTHHMM format or datetime object
-            time_to: End time in YYYYMMDDTHHMM format or datetime object
-            sort: Sort order (LATEST, EARLIEST, or RELEVANCE)
-            limit: Maximum number of results (up to 1000)
-            batch_size: Number of articles to process in each batch
-            
-        Returns:
-            Dictionary containing news feed and metadata
-        """
-        news_data = self.get_news_sentiment(
-            tickers=tickers,
-            topics=topics,
-            time_from=time_from,
-            time_to=time_to,
-            sort=sort,
-            limit=limit
-        )
-        
-        self.save_news_to_db(news_data, batch_size=batch_size)
-        return news_data
-    
-    # Add methods to query the normalized data
-    
-    def get_articles_by_topic(self, topic: str, limit: int = 100) -> List[Dict]:
+    def get_articles_by_topic(self, topic: str) -> List[Dict]:
         """Get articles related to a specific topic.
         
-        Args:
-            topic: Topic to search for
-            limit: Maximum number of results
-            
-        Returns:
-            List of article dictionaries
+        :param topic: Topic to search for
         """
         with sqlite3.connect(self.db_config.connection_string) as conn:
             conn.row_factory = sqlite3.Row
@@ -529,25 +457,20 @@ class AlphaVantageNewsExtractor:
             
             query = f"""
                 SELECT a.* 
-                FROM {self.db_config.table_name} a
+                FROM {self.db_config.articles_table_name} a
                 JOIN {self.db_config.topics_table_name} t ON a.url = t.url
                 WHERE t.topic = ?
                 ORDER BY a.time_published DESC
-                LIMIT ?
             """
             
-            cursor.execute(query, (topic, limit))
+            cursor.execute(query, (topic,))
             return [dict(row) for row in cursor.fetchall()]
     
-    def get_articles_by_ticker(self, ticker: str, limit: int = 100) -> List[Dict]:
+    def get_articles_by_ticker(self, ticker: str, from_date: str, to_date: str) -> List[Dict]:
         """Get articles related to a specific ticker.
         
-        Args:
-            ticker: Ticker symbol to search for
-            limit: Maximum number of results
-            
-        Returns:
-            List of article dictionaries
+        :param ticker: Ticker symbol to search for
+        
         """
         with sqlite3.connect(self.db_config.connection_string) as conn:
             conn.row_factory = sqlite3.Row
@@ -555,14 +478,14 @@ class AlphaVantageNewsExtractor:
             
             query = f"""
                 SELECT a.* 
-                FROM {self.db_config.table_name} a
+                FROM {self.db_config.articles_table_name} a
                 JOIN {self.db_config.ticker_sentiment_table_name} ts ON a.url = ts.url
                 WHERE ts.ticker = ?
+                AND a.time_published BETWEEN ? AND ?
                 ORDER BY a.time_published DESC
-                LIMIT ?
             """
             
-            cursor.execute(query, (ticker, limit))
+            cursor.execute(query, (ticker, from_date, to_date))
             return [dict(row) for row in cursor.fetchall()]
     
     def get_ticker_sentiment_for_article(self, url: str) -> List[Dict]:
@@ -588,30 +511,7 @@ class AlphaVantageNewsExtractor:
             cursor.execute(query, (url,))
             return [dict(row) for row in cursor.fetchall()]
     
-    def get_topics_for_article(self, url: str) -> List[Dict]:
-        """Get topics data for a specific article.
-        
-        Args:
-            url: Article URL
-            
-        Returns:
-            List of topic dictionaries
-        """
-        with sqlite3.connect(self.db_config.connection_string) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            
-            query = f"""
-                SELECT * 
-                FROM {self.db_config.topics_table_name}
-                WHERE url = ?
-                ORDER BY relevance_score DESC
-            """
-            
-            cursor.execute(query, (url,))
-            return [dict(row) for row in cursor.fetchall()]
-
-    def get_recent_articles_for_tickers(self, tickers: List[str], days_back: int = 5) -> Dict[str, List[Dict]]:
+    def call_news_api(self, tickers: List[str], days_back: int = 5) -> Dict[str, List[Dict]]:
         """Get recent news articles for a list of tickers.
         
         Args:
@@ -622,79 +522,56 @@ class AlphaVantageNewsExtractor:
             Dictionary mapping tickers to their articles
         """
         result = {}
+        now = datetime.now()
+        from_date = (now - timedelta(days=days_back)).strftime("%Y-%m-%d")
+        to_date = now.strftime("%Y-%m-%d 23:59:59")  # Include full current day
         
+        # Add rate limiting
+        api_calls = 0
+        API_CALL_LIMIT = 5
+        API_CALL_INTERVAL = 60  # seconds
+
         for ticker in tickers:
-            # Get articles from database first
-            articles = self.get_articles_by_ticker(ticker, limit=100)
-            
-            # Check if we have recent articles (within days_back)
-            cutoff_date = datetime.now() - timedelta(days=days_back)
-            recent_articles = []
-            
-            for article in articles:
-                try:
-                    article_date = datetime.strptime(article['time_published'], '%Y-%m-%d %H:%M:%S')
-                    if article_date >= cutoff_date:
-                        recent_articles.append(article)
-                except (ValueError, TypeError):
-                    # Skip articles with invalid dates
-                    continue
-            
-            # If we don't have enough recent articles, fetch new ones
-            if len(recent_articles) < 10:  # Arbitrary threshold
-                logger.info(f"Not enough recent articles for {ticker}, fetching from API")
-                self.extract_and_save_news_for_ticker(ticker, days_back=days_back, limit=50)
-                
-                # Get the updated articles
-                articles = self.get_articles_by_ticker(ticker, limit=100)
-                
-                # Filter for recent ones again
-                recent_articles = []
+            try:
+                # Get articles from database first
+                articles = self.get_articles_by_ticker(ticker, from_date, to_date)
+               
+                # If we don't have recent articles or today's articles, fetch new ones
+                needs_update = (
+                    not articles or 
+                    not any(article['time_published'].startswith(now.strftime("%Y-%m-%d")) for article in articles)
+                )
+
+                if needs_update:
+                    # Check API rate limiting
+                    if api_calls >= API_CALL_LIMIT:
+                        logger.info("Waiting for API rate limit reset...")
+                        time.sleep(API_CALL_INTERVAL)
+                        api_calls = 0
+
+                    logger.info(f"Fetching new articles for {ticker}")
+                    self.extract_and_save_news_for_ticker(ticker, from_date=from_date)
+                    api_calls += 1
+                    
+                    # Get the updated articles with proper date range
+                    articles = self.get_articles_by_ticker(ticker, from_date, to_date)
+
+                # For each article, add its topics and ticker sentiment
+                enriched_articles = []
                 for article in articles:
                     try:
-                        article_date = datetime.strptime(article['time_published'], '%Y-%m-%d %H:%M:%S')
-                        if article_date >= cutoff_date:
-                            recent_articles.append(article)
-                    except (ValueError, TypeError):
+                        article_copy = dict(article)
+                        article_copy['ticker_sentiment'] = self.get_ticker_sentiment_for_article(article['url'])
+                        enriched_articles.append(article_copy)
+                    except Exception as e:
+                        logger.error(f"Error enriching article {article.get('url')}: {e}")
                         continue
-            
-            # For each article, add its topics and ticker sentiment
-            enriched_articles = []
-            for article in recent_articles:
-                article_copy = dict(article)
-                article_copy['topics'] = self.get_topics_for_article(article['url'])
-                article_copy['ticker_sentiment'] = self.get_ticker_sentiment_for_article(article['url'])
-                enriched_articles.append(article_copy)
-            
-            result[ticker] = enriched_articles
+
+                result[ticker] = enriched_articles
+
+            except Exception as e:
+                logger.error(f"Error processing ticker {ticker}: {e}")
+                result[ticker] = []  # Return empty list for failed ticker
+                continue
         
         return result
-
-
-if __name__ == "__main__":
-    # Example usage
-    extractor = AlphaVantageNewsExtractor()
-    
-    # Single ticker
-    news = extractor.extract_and_save_news_for_ticker('AAPL', days_back=5, limit=1000)
-
-    # Example of querying the normalized data
-    # articles = extractor.get_articles_by_topic('Financial Markets')
-    # for article in articles[:3]:
-    #     print(f"Title: {article['title']}")
-    #     print(f"Published: {article['time_published']}")
-    #     print(f"Sentiment: {article['overall_sentiment_label']} ({article['overall_sentiment_score']})")
-    #     
-    #     # Get topics for this article
-    #     topics = extractor.get_topics_for_article(article['url'])
-    #     print("Topics:")
-    #     for topic in topics:
-    #         print(f"  - {topic['topic']} (relevance: {topic['relevance_score']})")
-    #     
-    #     # Get ticker sentiment for this article
-    #     tickers = extractor.get_ticker_sentiment_for_article(article['url'])
-    #     print("Tickers:")
-    #     for ticker in tickers:
-    #         print(f"  - {ticker['ticker']}: {ticker['ticker_sentiment_label']} (relevance: {ticker['relevance_score']})")
-    #     
-    #     print("\n" + "-"*50 + "\n")

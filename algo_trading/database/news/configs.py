@@ -8,7 +8,7 @@ class FinnhubNewsDbConfig:
     
     db_name: str = "news.db"
     table_name: str = "finnhub_news_articles"
-    db_dir: Path = Path(".")
+    db_dir: Path = Path("/Users/deepset/algo-trading/warehouse")
     columns: Dict[str, Dict[str, Any]] = None
     
     def __post_init__(self):
@@ -63,10 +63,10 @@ class AlphaVantageNewsDbConfig:
     """Database configuration for Alpha Vantage news data."""
     
     db_name: str = "news.db"
-    db_dir: Path = Path(".")
+    db_dir: Path = Path("/Users/deepset/algo-trading/warehouse")
     
     # Main articles table
-    table_name: str = "alphavantage_news_articles"
+    articles_table_name: str = "alphavantage_news_articles"
     
     # Additional tables for normalized data
     topics_table_name: str = "alphavantage_news_topics"
@@ -100,7 +100,7 @@ class AlphaVantageNewsDbConfig:
                 "url": {"type": "TEXT", "constraints": "NOT NULL"},
                 "topic": {"type": "TEXT", "constraints": "NOT NULL"},
                 "relevance_score": {"type": "REAL", "constraints": ""},
-                "FOREIGN KEY(url)": {"type": "", "constraints": "REFERENCES " + self.table_name + "(url) ON DELETE CASCADE"}
+                "FOREIGN KEY(url)": {"type": "", "constraints": "REFERENCES " + self.articles_table_name + "(url) ON DELETE CASCADE"}
             }
             
         if self.ticker_sentiment_columns is None:
@@ -111,7 +111,7 @@ class AlphaVantageNewsDbConfig:
                 "relevance_score": {"type": "REAL", "constraints": ""},
                 "ticker_sentiment_score": {"type": "REAL", "constraints": ""},
                 "ticker_sentiment_label": {"type": "TEXT", "constraints": ""},
-                "FOREIGN KEY(url)": {"type": "", "constraints": "REFERENCES " + self.table_name + "(url) ON DELETE CASCADE"}
+                "FOREIGN KEY(url)": {"type": "", "constraints": "REFERENCES " + self.articles_table_name + "(url) ON DELETE CASCADE"}
             }
     
     @property
@@ -134,7 +134,7 @@ class AlphaVantageNewsDbConfig:
             column_definitions.append(col_def)
         
         return f"""
-            CREATE TABLE IF NOT EXISTS {self.table_name} (
+            CREATE TABLE IF NOT EXISTS {self.articles_table_name} (
                 {", ".join(column_definitions)}
             )
         """
