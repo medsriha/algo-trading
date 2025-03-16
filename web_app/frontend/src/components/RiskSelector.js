@@ -1,39 +1,53 @@
 import React from 'react';
-import { FormControl, InputLabel, Select, MenuItem, Box, Button, Tooltip } from '@mui/material';
+import { 
+  Box, 
+  Button, 
+  Slider, 
+  Typography,
+  Paper
+} from '@mui/material';
 import SecurityIcon from '@mui/icons-material/Security';
-import BalanceIcon from '@mui/icons-material/Balance';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import InfoIcon from '@mui/icons-material/Info';
+import BalanceIcon from '@mui/icons-material/Balance';
+import SentimentSatisfiedAltIcon from '@mui/icons-material/SentimentSatisfiedAlt';
 import { motion } from 'framer-motion';
 import { THEME_CONSTANTS } from '../index';
 
 const RiskSelector = ({ onSelect, selectedRisk }) => {
-  const [risk, setRisk] = React.useState('');
+  const [sliderValue, setSliderValue] = React.useState(50);
   
-  const handleChange = (event) => {
-    setRisk(event.target.value);
+  const handleSliderChange = (event, newValue) => {
+    setSliderValue(newValue);
   };
 
   const handleSubmit = () => {
-    if (risk) {
-      onSelect(risk);
+    // Convert slider value to risk profile
+    let risk;
+    if (sliderValue <= 33) {
+      risk = 'conservative';
+    } else if (sliderValue <= 66) {
+      risk = 'moderate';
+    } else {
+      risk = 'aggressive';
     }
+    onSelect(risk);
   };
 
-  // Define risk option information
-  const riskInfo = {
-    conservative: {
-      icon: <SecurityIcon sx={{ color: THEME_CONSTANTS.colors.success }} />,
-      description: 'Lower risk, more stable returns, fewer losses'
-    },
-    moderate: {
-      icon: <BalanceIcon sx={{ color: THEME_CONSTANTS.colors.primary }} />,
-      description: 'Balanced approach with moderate risk and return potential'
-    },
-    aggressive: {
-      icon: <TrendingUpIcon sx={{ color: THEME_CONSTANTS.colors.error }} />,
-      description: 'Higher risk for potentially greater returns, more tolerance for losses'
+  // Get the appropriate color based on slider value
+  const getColor = (value) => {
+    if (value <= 33) return THEME_CONSTANTS.colors.success;
+    if (value <= 66) return THEME_CONSTANTS.colors.primary;
+    return THEME_CONSTANTS.colors.error;
+  };
+
+  // Get the appropriate description based on slider value
+  const getDescription = (value) => {
+    if (value <= 33) {
+      return "You're feeling cautious today. Let's focus on stable, lower-risk opportunities.";
+    } else if (value <= 66) {
+      return "You're feeling balanced today. We'll look for moderate opportunities with reasonable risk.";
     }
+    return "You're feeling adventurous today. We'll explore higher-risk opportunities with greater potential returns.";
   };
 
   return (
@@ -42,58 +56,75 @@ const RiskSelector = ({ onSelect, selectedRisk }) => {
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.4 }}
     >
-      <Box sx={{ 
-        display: 'flex', 
-        flexDirection: { xs: 'column', sm: 'row' }, 
-        alignItems: 'center',
-        gap: 2,
-        mb: 4,
-        mx: 'auto',
-        maxWidth: 600
-      }}>
-        <FormControl fullWidth variant="outlined">
-          <InputLabel id="risk-selector-label">Risk Profile</InputLabel>
-          <Select
-            labelId="risk-selector-label"
-            id="risk-selector"
-            value={risk}
-            onChange={handleChange}
-            label="Risk Profile"
-            sx={{ 
-              borderRadius: THEME_CONSTANTS.radius.small,
-              '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: THEME_CONSTANTS.colors.border
-              }
-            }}
-          >
-            {Object.entries(riskInfo).map(([key, { icon, description }]) => (
-              <MenuItem key={key} value={key} sx={{ display: 'flex', alignItems: 'center' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                  {icon}
-                  <span style={{ textTransform: 'capitalize' }}>{key}</span>
-                </Box>
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={handleSubmit}
-          disabled={!risk}
-          sx={{ 
-            borderRadius: THEME_CONSTANTS.radius.small, 
-            py: 1.5,
-            px: 4,
-            minWidth: { xs: '100%', sm: '150px' }
-          }}
-        >
-          Analyze
-        </Button>
-      </Box>
+      <Paper 
+        elevation={0}
+        sx={{ 
+          p: 4, 
+          borderRadius: THEME_CONSTANTS.radius.medium,
+          border: `1px solid ${THEME_CONSTANTS.colors.border}`,
+          bgcolor: THEME_CONSTANTS.colors.background,
+          maxWidth: 600,
+          mx: 'auto',
+          mb: 4
+        }}
+      >
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <SentimentSatisfiedAltIcon /> How are you feeling about the market today?
+          </Typography>
+          
+          <Box sx={{ px: 2, mt: 4 }}>
+            <Slider
+              value={sliderValue}
+              onChange={handleSliderChange}
+              aria-labelledby="risk-slider"
+              valueLabelDisplay="off"
+              sx={{
+                '& .MuiSlider-thumb': {
+                  height: 24,
+                  width: 24,
+                  backgroundColor: getColor(sliderValue),
+                },
+                '& .MuiSlider-track': {
+                  backgroundColor: getColor(sliderValue),
+                },
+                '& .MuiSlider-rail': {
+                  opacity: 0.5,
+                  backgroundColor: '#bfbfbf',
+                },
+              }}
+            />
+          </Box>
 
-      {risk && (
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            mt: 1,
+            color: THEME_CONSTANTS.colors.textSecondary,
+            position: 'relative'
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <SecurityIcon sx={{ color: THEME_CONSTANTS.colors.success }} />
+              <Typography variant="body2">Conservative</Typography>
+            </Box>
+            <Box sx={{ 
+              position: 'absolute', 
+              left: '50%', 
+              transform: 'translateX(-50%)',
+              display: 'flex', 
+              alignItems: 'center',
+              gap: 0.5
+            }}>
+              <BalanceIcon sx={{ color: THEME_CONSTANTS.colors.primary }} />
+              <Typography variant="body2">Moderate</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <TrendingUpIcon sx={{ color: THEME_CONSTANTS.colors.error }} />
+              <Typography variant="body2">Aggressive</Typography>
+            </Box>
+          </Box>
+        </Box>
+
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -101,21 +132,37 @@ const RiskSelector = ({ onSelect, selectedRisk }) => {
         >
           <Box sx={{ 
             display: 'flex', 
-            alignItems: 'center', 
-            gap: 1.5,
-            bgcolor: THEME_CONSTANTS.colors.background,
-            p: 2,
-            borderRadius: THEME_CONSTANTS.radius.small,
-            mb: 3,
-            border: `1px solid ${THEME_CONSTANTS.colors.border}`
+            flexDirection: 'column',
+            gap: 2,
+            alignItems: 'center',
+            textAlign: 'center'
           }}>
-            <InfoIcon sx={{ color: THEME_CONSTANTS.colors.primary }} />
-            <Box sx={{ color: THEME_CONSTANTS.colors.textSecondary }}>
-              {riskInfo[risk].description}
-            </Box>
+            <Typography 
+              variant="body1" 
+              sx={{ 
+                color: getColor(sliderValue),
+                fontWeight: 500
+              }}
+            >
+              {getDescription(sliderValue)}
+            </Typography>
+
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleSubmit}
+              sx={{ 
+                borderRadius: THEME_CONSTANTS.radius.small, 
+                py: 1.5,
+                px: 4,
+                minWidth: 200
+              }}
+            >
+              Analyze
+            </Button>
           </Box>
         </motion.div>
-      )}
+      </Paper>
     </motion.div>
   );
 };

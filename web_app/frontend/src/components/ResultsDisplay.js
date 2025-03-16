@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Box, 
   Typography, 
@@ -13,7 +13,13 @@ import {
   DialogContent,
   IconButton,
   Tooltip,
-  Divider
+  Divider,
+  Snackbar,
+  Alert,
+  Popover,
+  Avatar,
+  Stack,
+  Paper
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
@@ -23,6 +29,10 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import CloseIcon from '@mui/icons-material/Close';
 import NotificationsIcon from '@mui/icons-material/Notifications';
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
+import NotificationsOffIcon from '@mui/icons-material/NotificationsOff';
+import NewspaperIcon from '@mui/icons-material/Newspaper';
+import CircleIcon from '@mui/icons-material/Circle';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { 
@@ -235,6 +245,121 @@ const TextAnalysisModal = ({ open, onClose, ticker, analysisText }) => {
           }}
         >
           <ReactMarkdown>{analysisText}</ReactMarkdown>
+        </Box>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// Notification Dialog Component
+const NotificationDialog = ({ open, onClose, ticker }) => {
+  const [notificationEnabled, setNotificationEnabled] = useState(false);
+  
+  // Check if notification is already enabled for this ticker
+  useEffect(() => {
+    if (open) {
+      // Get saved notifications from localStorage
+      const savedNotifications = JSON.parse(localStorage.getItem('stockNotifications') || '{}');
+      setNotificationEnabled(!!savedNotifications[ticker]);
+    }
+  }, [open, ticker]);
+  
+  const handleToggleNotification = () => {
+    // Get current notifications
+    const savedNotifications = JSON.parse(localStorage.getItem('stockNotifications') || '{}');
+    
+    if (notificationEnabled) {
+      // Remove notification
+      delete savedNotifications[ticker];
+    } else {
+      // Add notification
+      savedNotifications[ticker] = {
+        enabled: true,
+        timestamp: new Date().toISOString(),
+      };
+    }
+    
+    // Save back to localStorage
+    localStorage.setItem('stockNotifications', JSON.stringify(savedNotifications));
+    
+    // Update state
+    setNotificationEnabled(!notificationEnabled);
+  };
+  
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: THEME.radius.medium,
+          boxShadow: THEME.shadows.large,
+        }
+      }}
+    >
+      <DialogTitle sx={{ 
+        borderBottom: `1px solid ${THEME.colors.border}`,
+        px: 3,
+        py: 2,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: `${THEME.colors.primary}08`,
+      }}>
+        <Typography variant="h6" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+          <NotificationsIcon sx={{ mr: 1.5 }} /> 
+          {ticker} - Notifications
+        </Typography>
+        <IconButton 
+          onClick={onClose} 
+          size="small"
+          sx={{
+            backgroundColor: 'rgba(0,0,0,0.05)',
+            '&:hover': {
+              backgroundColor: 'rgba(0,0,0,0.1)',
+            }
+          }}
+        >
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </DialogTitle>
+      
+      <DialogContent sx={{ p: 3 }}>
+        <Box sx={{ textAlign: 'center', py: 2 }}>
+          <Typography variant="h6" sx={{ mb: 3 }}>
+            {notificationEnabled 
+              ? "You'll be notified when it's a good day to buy this stock" 
+              : "Get notified when it's a good day to buy this stock"}
+          </Typography>
+          
+          <Button
+            variant={notificationEnabled ? "outlined" : "contained"}
+            color={notificationEnabled ? "error" : "primary"}
+            size="large"
+            startIcon={notificationEnabled ? <NotificationsOffIcon /> : <NotificationsActiveIcon />}
+            onClick={handleToggleNotification}
+            sx={{ 
+              px: 3, 
+              py: 1.5,
+              borderRadius: THEME.radius.small,
+              boxShadow: notificationEnabled ? 'none' : THEME.shadows.small,
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                transform: 'translateY(-2px)',
+                boxShadow: notificationEnabled ? 'none' : THEME.shadows.medium,
+              }
+            }}
+          >
+            {notificationEnabled ? "Disable Notifications" : "Enable Notifications"}
+          </Button>
+          
+          <Typography variant="body2" sx={{ mt: 3, color: THEME.colors.textSecondary }}>
+            {notificationEnabled 
+              ? "You will receive notifications when our algorithm detects a good buying opportunity for this stock."
+              : "Our algorithm will monitor this stock and notify you when it's a good time to buy."}
+          </Typography>
         </Box>
       </DialogContent>
     </Dialog>
@@ -519,9 +644,305 @@ const MotionWrapper = ({ children }) => (
   </motion.div>
 );
 
-const TickerCard = ({ ticker, isEntryPoint, index, analystText, returnValue }) => {
+// Add NewsCircles component before TickerCard component
+const NewsCircles = ({ newsData, ticker, sentimentData }) => {
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(null);
+
+  const handlePopoverOpen = (event, date) => {
+    setAnchorEl(event.currentTarget);
+    setSelectedDate(date);
+  };
+
+  const handlePopoverClose = () => {
+    setAnchorEl(null);
+    setSelectedDate(null);
+  };
+
+  const open = Boolean(anchorEl);
+
+  if (!newsData || !newsData[ticker]) return null;
+
+  // Sort dates from oldest to newest for display order (oldest closer to ticker)
+  // We still want newest first in the array so we can map them in reverse
+  const dates = Object.keys(newsData[ticker]).sort((a, b) => new Date(b) - new Date(a));
+
+  // Helper function to get circle color based on sentiment score
+  const getCircleColor = (date) => {
+    // Default color if no sentiment data is available
+    if (!sentimentData || !sentimentData[ticker]) return THEME.colors.primary;
+    
+    // Get sentiment data for this ticker
+    const tickerSentiment = sentimentData[ticker];
+    
+    // Use the average score to determine color
+    const score = tickerSentiment.average_score;
+    
+    if (score >= 0.3) return THEME.colors.success; // Strong bullish
+    if (score >= 0.1) return `${THEME.colors.success}CC`; // Somewhat bullish
+    if (score <= -0.3) return THEME.colors.error; // Strong bearish
+    if (score <= -0.1) return `${THEME.colors.error}CC`; // Somewhat bearish
+    return THEME.colors.primary; // Neutral
+  };
+
+  // Helper function to get sentiment label for tooltip
+  const getSentimentLabel = () => {
+    if (!sentimentData || !sentimentData[ticker]) return "No sentiment data";
+    
+    const tickerSentiment = sentimentData[ticker];
+    return tickerSentiment.sentiment_category || "Neutral";
+  };
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+      {/* Reverse the array to display oldest dates first (closest to ticker) */}
+      {[...dates].reverse().map((date) => {
+        const articles = newsData[ticker][date];
+        if (!articles || articles.length === 0) return null;
+
+        // Calculate how recent the date is for styling
+        const daysDiff = Math.floor((new Date() - new Date(date)) / (1000 * 60 * 60 * 24));
+        
+        // Get sentiment for this date's articles
+        const dateSentiment = articles.reduce((avg, article) => {
+          return avg + (article.overall_sentiment_score || 0);
+        }, 0) / articles.length;
+        
+        // Determine color based on sentiment
+        let circleColor;
+        if (dateSentiment >= 0.3) circleColor = THEME.colors.success;
+        else if (dateSentiment >= 0.1) circleColor = `${THEME.colors.success}CC`;
+        else if (dateSentiment <= -0.3) circleColor = THEME.colors.error;
+        else if (dateSentiment <= -0.1) circleColor = `${THEME.colors.error}CC`;
+        else circleColor = THEME.colors.primary;
+        
+        // Get sentiment label
+        let sentimentLabel = "Neutral";
+        if (dateSentiment >= 0.3) sentimentLabel = "Bullish";
+        else if (dateSentiment >= 0.1) sentimentLabel = "Somewhat-Bullish";
+        else if (dateSentiment <= -0.3) sentimentLabel = "Bearish";
+        else if (dateSentiment <= -0.1) sentimentLabel = "Somewhat-Bearish";
+        
+        return (
+          <Box key={date}>
+            <Tooltip 
+              title={`${new Date(date).toLocaleDateString()} - ${articles.length} articles - ${sentimentLabel}`}
+              arrow
+              placement="top"
+            >
+              <IconButton
+                size="small"
+                onClick={(e) => handlePopoverOpen(e, date)}
+                sx={{
+                  padding: 0.2,
+                  '&:hover': {
+                    backgroundColor: `${circleColor}15`,
+                  }
+                }}
+              >
+                <CircleIcon 
+                  sx={{ 
+                    fontSize: '0.8rem',
+                    // Use sentiment-based color
+                    color: circleColor,
+                    opacity: Math.max(0.4, 1 - (daysDiff * 0.15)),
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      opacity: 1,
+                      transform: 'scale(1.2)',
+                    }
+                  }} 
+                />
+              </IconButton>
+            </Tooltip>
+
+            <Popover
+              sx={{
+                pointerEvents: 'auto', // Allow interaction with popover content
+              }}
+              open={open && selectedDate === date}
+              anchorEl={anchorEl}
+              anchorOrigin={{
+                vertical: 'bottom',
+                horizontal: 'center',
+              }}
+              transformOrigin={{
+                vertical: 'top',
+                horizontal: 'center',
+              }}
+              onClose={handlePopoverClose}
+              disableRestoreFocus
+              slotProps={{
+                paper: {
+                  onMouseLeave: handlePopoverClose
+                }
+              }}
+            >
+              <Paper sx={{ 
+                p: 2, 
+                maxWidth: 400,
+                maxHeight: 400,
+                overflowY: 'auto',
+                backgroundColor: THEME.colors.cardBackground,
+                boxShadow: THEME.shadows.medium,
+                border: `1px solid ${THEME.colors.border}`,
+              }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="subtitle2" sx={{ color: THEME.colors.textSecondary, fontWeight: 600 }}>
+                    <CalendarTodayIcon sx={{ fontSize: '0.9rem', mr: 0.5, verticalAlign: 'text-bottom' }} />
+                    {new Date(date).toLocaleDateString()} - {articles.length} articles
+                  </Typography>
+                  <IconButton 
+                    size="small" 
+                    onClick={handlePopoverClose}
+                    sx={{ 
+                      padding: 0.5,
+                      '&:hover': {
+                        backgroundColor: `${THEME.colors.error}15`,
+                      }
+                    }}
+                  >
+                    <CloseIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+                
+                {/* Add sentiment summary */}
+                <Box 
+                  sx={{ 
+                    mb: 2, 
+                    p: 1.5, 
+                    borderRadius: THEME.radius.small,
+                    backgroundColor: `${circleColor}15`,
+                    border: `1px solid ${circleColor}40`,
+                  }}
+                >
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: circleColor }}>
+                    Daily Sentiment: {sentimentLabel}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: THEME.colors.textSecondary }}>
+                    Average sentiment score: {dateSentiment.toFixed(2)}
+                  </Typography>
+                </Box>
+                
+                <Stack spacing={2}>
+                  {/* Sort articles by time published, newest first */}
+                  {articles
+                    .sort((a, b) => new Date(b.time_published) - new Date(a.time_published))
+                    .map((article, idx) => (
+                    <Box 
+                      key={idx}
+                      component="a"
+                      href={article.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      sx={{
+                        textDecoration: 'none',
+                        color: 'inherit',
+                        display: 'flex',
+                        gap: 2,
+                        p: 1,
+                        borderRadius: THEME.radius.small,
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
+                          backgroundColor: `${THEME.colors.primary}08`,
+                        }
+                      }}
+                    >
+                      {article.banner_image && (
+                        <Avatar
+                          variant="rounded"
+                          src={article.banner_image}
+                          alt={article.title}
+                          sx={{ 
+                            width: 60, 
+                            height: 60,
+                            borderRadius: THEME.radius.small,
+                          }}
+                        />
+                      )}
+                      <Box sx={{ flex: 1 }}>
+                        <Typography 
+                          variant="body2" 
+                          sx={{ 
+                            fontWeight: 600,
+                            color: THEME.colors.textPrimary,
+                            mb: 0.5,
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          {article.title}
+                        </Typography>
+                        <Typography 
+                          variant="caption" 
+                          sx={{ 
+                            color: THEME.colors.textSecondary,
+                            display: 'block',
+                          }}
+                        >
+                          {article.source} • {new Date(article.time_published).toLocaleTimeString()}
+                        </Typography>
+                        <Chip
+                          size="small"
+                          label={article.overall_sentiment_label || "Neutral"}
+                          sx={{
+                            mt: 0.5,
+                            height: 20,
+                            fontSize: '0.65rem',
+                            backgroundColor: getSentimentColor(article.overall_sentiment_label),
+                            color: '#fff',
+                          }}
+                        />
+                      </Box>
+                    </Box>
+                  ))}
+                </Stack>
+              </Paper>
+            </Popover>
+          </Box>
+        );
+      })}
+    </Box>
+  );
+};
+
+// Helper function to get color based on sentiment
+const getSentimentColor = (sentiment) => {
+  if (!sentiment) return THEME.colors.textSecondary;
+  
+  switch(sentiment) {
+    case 'Bullish':
+      return THEME.colors.success;
+    case 'Somewhat-Bullish':
+      return `${THEME.colors.success}CC`;
+    case 'Bearish':
+      return THEME.colors.error;
+    case 'Somewhat-Bearish':
+      return `${THEME.colors.error}CC`;
+    default:
+      return THEME.colors.textSecondary;
+  }
+};
+
+// Modify TickerCard component to include NewsCircles with sentiment data
+const TickerCard = ({ ticker, isEntryPoint, index, analystText, returnValue, newsData, sentimentData }) => {
   const [showChartModal, setShowChartModal] = useState(false);
   const [showTextAnalysisModal, setShowTextAnalysisModal] = useState(false);
+  const [showNotificationDialog, setShowNotificationDialog] = useState(false);
+  const [isNotificationEnabled, setIsNotificationEnabled] = useState(false);
+  const [showSnackbar, setShowSnackbar] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+
+  // Check if notification is enabled for this ticker
+  useEffect(() => {
+    if (!isEntryPoint) {
+      const savedNotifications = JSON.parse(localStorage.getItem('stockNotifications') || '{}');
+      setIsNotificationEnabled(!!savedNotifications[ticker]);
+    }
+  }, [ticker, isEntryPoint]);
 
   const handleOpenChartModal = () => {
     setShowChartModal(true);
@@ -538,6 +959,39 @@ const TickerCard = ({ ticker, isEntryPoint, index, analystText, returnValue }) =
   const handleCloseTextAnalysisModal = () => {
     setShowTextAnalysisModal(false);
   };
+  
+  const handleOpenNotificationDialog = () => {
+    setShowNotificationDialog(true);
+  };
+  
+  const handleCloseNotificationDialog = () => {
+    setShowNotificationDialog(false);
+    
+    // Check if notification status changed
+    const savedNotifications = JSON.parse(localStorage.getItem('stockNotifications') || '{}');
+    const newStatus = !!savedNotifications[ticker];
+    
+    if (newStatus !== isNotificationEnabled) {
+      setIsNotificationEnabled(newStatus);
+      
+      // Show snackbar
+      setSnackbarMessage(newStatus 
+        ? `You'll be notified when ${ticker} is a good buy` 
+        : `Notifications disabled for ${ticker}`);
+      setSnackbarSeverity(newStatus ? 'success' : 'info');
+      setShowSnackbar(true);
+    }
+  };
+  
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    setShowSnackbar(false);
+  };
+
+  // Check if news data exists for this ticker
+  const hasNewsData = newsData && newsData[ticker] && Object.keys(newsData[ticker]).length > 0;
 
   return (
     <Grid item xs={12} sm={12} md={6} lg={4} key={index}>
@@ -572,17 +1026,101 @@ const TickerCard = ({ ticker, isEntryPoint, index, analystText, returnValue }) =
             p: { xs: 2, md: 3 },
           }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-              <Typography 
-                variant="h6" 
-                component="div" 
-                sx={{ 
-                  fontWeight: '700',
-                  color: THEME.colors.textPrimary,
-                  fontSize: { xs: '1.1rem', md: '1.25rem' }
-                }}
-              >
-                {ticker}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography 
+                  variant="h6" 
+                  component="div" 
+                  sx={{ 
+                    fontWeight: '700',
+                    color: THEME.colors.textPrimary,
+                    fontSize: { xs: '1.1rem', md: '1.25rem' }
+                  }}
+                >
+                  {ticker}
+                </Typography>
+                {hasNewsData && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <NewsCircles 
+                        newsData={newsData} 
+                        ticker={ticker} 
+                        sentimentData={sentimentData}
+                      />
+                      <Tooltip 
+                        title="Each circle represents a day with news articles. Colors indicate sentiment: green (bullish), red (bearish), blue (neutral). Click to view insights." 
+                        arrow
+                        placement="top"
+                      >
+                        <Box 
+                          component="span" 
+                          sx={{ 
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            ml: 0.5,
+                            cursor: 'help',
+                            color: THEME.colors.textSecondary,
+                            '&:hover': { color: THEME.colors.primary }
+                          }}
+                        >
+                          <NewspaperIcon sx={{ fontSize: '0.9rem' }} />
+                        </Box>
+                      </Tooltip>
+                    </Box>
+                    <Typography 
+                      variant="caption" 
+                      sx={{ 
+                        fontSize: '0.65rem', 
+                        color: THEME.colors.textSecondary,
+                        mt: -0.5,
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}
+                    >
+                      Recent news insights
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+              
+              {/* Add notification bell for non-entry tickers */}
+              {!isEntryPoint && (
+                <Tooltip 
+                  title={isNotificationEnabled 
+                    ? "Notifications enabled - click to manage" 
+                    : "Get notified when it's a good day to buy"}
+                  arrow
+                  placement="top"
+                >
+                  <IconButton
+                    onClick={handleOpenNotificationDialog}
+                    size="small"
+                    color={isNotificationEnabled ? "primary" : "default"}
+                    sx={{
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        color: THEME.colors.primary,
+                        transform: 'scale(1.1)',
+                      },
+                      ...(isNotificationEnabled && {
+                        animation: 'pulse 2s infinite',
+                        '@keyframes pulse': {
+                          '0%': {
+                            boxShadow: `0 0 0 0 ${THEME.colors.primary}40`,
+                          },
+                          '70%': {
+                            boxShadow: `0 0 0 6px ${THEME.colors.primary}00`,
+                          },
+                          '100%': {
+                            boxShadow: `0 0 0 0 ${THEME.colors.primary}00`,
+                          },
+                        },
+                      })
+                    }}
+                  >
+                    {isNotificationEnabled ? <NotificationsActiveIcon /> : <NotificationsIcon />}
+                  </IconButton>
+                </Tooltip>
+              )}
             </Box>
             
             {returnValue !== undefined && (
@@ -626,7 +1164,7 @@ const TickerCard = ({ ticker, isEntryPoint, index, analystText, returnValue }) =
                 <Divider sx={{ my: 2 }} />
 
                 {/* Action Buttons - only shown for entry tickers */}
-                <Box sx={{ display: 'flex', justifyContent: 'center', gap: 3, px: 3, pb: 2 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, px: 2, pb: 2 }}>
                   <Tooltip title="View price chart and SMA crossover analysis" arrow placement="top">
                     <IconButton
                       color="primary"
@@ -675,8 +1213,8 @@ const TickerCard = ({ ticker, isEntryPoint, index, analystText, returnValue }) =
             )}
           </CardContent>
           
-          {/* Modals and Dialogs - only for entry tickers */}
-          {isEntryPoint && (
+          {/* Modals and Dialogs */}
+          {isEntryPoint ? (
             <>
               <ChartModal 
                 open={showChartModal} 
@@ -691,7 +1229,33 @@ const TickerCard = ({ ticker, isEntryPoint, index, analystText, returnValue }) =
                 analysisText={analystText}
               />
             </>
+          ) : (
+            <NotificationDialog
+              open={showNotificationDialog}
+              onClose={handleCloseNotificationDialog}
+              ticker={ticker}
+            />
           )}
+          
+          {/* Snackbar for notification status changes */}
+          <Snackbar
+            open={showSnackbar}
+            autoHideDuration={4000}
+            onClose={handleCloseSnackbar}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+          >
+            <Alert 
+              onClose={handleCloseSnackbar} 
+              severity={snackbarSeverity} 
+              sx={{ 
+                width: '100%',
+                borderRadius: THEME.radius.small,
+                boxShadow: THEME.shadows.medium,
+              }}
+            >
+              {snackbarMessage}
+            </Alert>
+          </Snackbar>
         </Card>
       </motion.div>
     </Grid>
@@ -844,6 +1408,8 @@ const ResultsDisplay = ({ results }) => {
                   index={index}
                   analystText={getAnalystTextForTicker(ticker)}
                   returnValue={getReturnValueForTicker(ticker)}
+                  newsData={results.daily_news}
+                  sentimentData={results.daily_sentiment}
                 />
               ))}
             </Grid>
@@ -945,6 +1511,8 @@ const ResultsDisplay = ({ results }) => {
                   index={index}
                   analystText={getAnalystTextForTicker(ticker)}
                   returnValue={getReturnValueForTicker(ticker)}
+                  newsData={results.daily_news}
+                  sentimentData={results.daily_sentiment}
                 />
               ))}
             </Grid>

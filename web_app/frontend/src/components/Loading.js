@@ -8,11 +8,10 @@ const Loading = () => {
   const loadingMessages = [
     "Analyzing market patterns...",
     "Calculating risk profiles...",
-    "Processing historical data...",
-    "Identifying crossover opportunities...",
+    "Identifying opportunities...",
     "Evaluating market conditions...",
-    "Consulting with AI algorithms...",
-    "Examining technical indicators..."
+    "Examining technical indicators...",
+    "Checking the news..."
   ];
   
   const [messageIndex, setMessageIndex] = React.useState(0);
