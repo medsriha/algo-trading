@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Literal
 import logging
 import os.path
-
+from pathlib import Path
 from langchain_openai import ChatOpenAI
 from algo_trading.database import DatabaseCrossoverConfig
 from algo_trading.models import CrossoverConfig
@@ -17,7 +17,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("api.log"),
+        logging.FileHandler("/Users/deepset/algo-trading/logs/api.log"),
     ],
 )
 logger = logging.getLogger(__name__)
@@ -49,10 +49,7 @@ default_crossover_config = CrossoverConfig(
 )
 
 # Define default database config
-default_db_config = DatabaseCrossoverConfig(
-    db_name="crossover.db", 
-    table_name="crossover"
-)
+default_db_config = DatabaseCrossoverConfig()
 
 @app.post("/analyze")
 async def analyze_tickers(request: RiskLevelRequest) -> Dict[str, Any]:
@@ -90,7 +87,7 @@ async def get_ticker_data(ticker: str, timeframe: str, filename: str):
     logger.info(f"Received request for {ticker} {timeframe} {filename}")
     
     # Use the absolute path as specified
-    file_path = f"/Users/deepset/algo-trading/data/{ticker}/{timeframe}/{filename}"
+    file_path = f"/Users/deepset/algo-trading/warehouse/file_system/{ticker}/{timeframe}/{filename}"
     
     # Check if the file exists
     if not os.path.isfile(file_path):
